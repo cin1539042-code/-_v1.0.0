@@ -10,13 +10,13 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   const db = await getDb();
   const [work] = await db.select().from(works).where(eq(works.id, Number(id))).limit(1);
   if (!work || work.status !== "published") return Response.json({ error: "作品不存在" }, { status: 404 });
-  let fileText = "";
+  let appHtml = "";
   if (work.fileKey) {
     const { env } = await import("cloudflare:workers");
     const object = await env.BUCKET.get(work.fileKey);
-    if (object) fileText = await object.text();
+    if (object) appHtml = await object.text();
   }
-  return Response.json({ work: { id: work.id, title: work.title, description: work.description, type: work.type, authorName: work.authorName, content: work.content, fileName: work.fileName, createdAt: work.createdAt, fileText } });
+  return Response.json({ work: { id: work.id, title: work.title, description: work.description, type: work.type, authorName: work.authorName, content: work.content, fileName: work.fileName, createdAt: work.createdAt, appHtml: appHtml || work.content } });
 }
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
