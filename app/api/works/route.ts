@@ -1,6 +1,6 @@
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, inArray } from "drizzle-orm";
 import { getDb } from "../../../db";
-import { profiles, works } from "../../../db/schema";
+import { favorites, profiles, works } from "../../../db/schema";
 import { getChatGPTUser } from "../../chatgpt-auth";
 
 export const dynamic = "force-dynamic";
@@ -8,14 +8,24 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const mine = url.searchParams.get("mine") === "1";
-  const user = mine ? await getChatGPTUser() : null;
-  if (mine && !user) return Response.json({ error: "请先登录" }, { status: 401 });
+  const favorite = url.searchParams.get("favorite") === "1";
+  const user = await getChatGPTUser();
+  if ((mine||favorite) && !user) return Response.json({ error: "请先登录" }, { status: 401 });
   try {
     const db = await getDb();
-    const rows = mine && user
+    const favoriteIds=favorite&&user?(await db.select().from(favorites).where(eq(favorites.userEmail,user.email))).map(f=>f.workId):[];
+    const rows = favorite
+      ? favoriteIds.length?await db.select().from(works).where(inArray(works.id,favoriteIds)).orderBy(desc(works.updatedAt)).limit(100):[]
+      : mine && user
       ? await db.select().from(works).where(eq(works.authorEmail, user.email)).orderBy(desc(works.createdAt)).limit(100)
       : await db.select().from(works).where(eq(works.status, "published")).orderBy(desc(works.createdAt)).limit(100);
-    return Response.json({ works: rows.map(row => ({ id: row.id, title: row.title, description: row.description, type: row.type, authorName: row.authorName, status: row.status, externalUrl: row.externalUrl, coverUrl: row.coverKey ? `/api/media?key=${encodeURIComponent(row.coverKey)}` : null, createdAt: row.createdAt })) });
+    const emails=[...new Set(rows.map(r=>r.authorEmail))];
+    const profileRows=emails.length?await db.select().from(profiles).where(inArray(profiles.email,emails)):[];
+    const profileMap=new Map(profileRows.map(p=>[p.email,p]));
+    const ids=rows.map(r=>r.id);const favoriteRows=ids.length?await db.select().from(favorites).where(inArray(favorites.workId,ids)):[];
+    const favoriteCounts=new Map<number,number>();favoriteRows.forEach(f=>favoriteCounts.set(f.workId,(favoriteCounts.get(f.workId)||0)+1));
+    const mineSet=new Set(favoriteRows.filter(f=>f.userEmail===user?.email).map(f=>f.workId));
+    return Response.json({ works: rows.map(row => {const p=profileMap.get(row.authorEmail);return ({ id: row.id, title: row.title, description: row.description, type: row.type, authorName: p?.displayName||row.authorName, authorAvatar:p?.avatarKey?`/api/media?key=${encodeURIComponent(p.avatarKey)}`:null,authorEmoji:p?.avatar||"🐟", status: row.status, externalUrl: row.externalUrl, coverUrl: row.coverKey ? `/api/media?key=${encodeURIComponent(row.coverKey)}` : null, playCount:row.playCount,favoriteCount:favoriteCounts.get(row.id)||0,isFavorited:mineSet.has(row.id),createdAt: row.createdAt,updatedAt:row.updatedAt })}) });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "加载失败" }, { status: 500 });
   }

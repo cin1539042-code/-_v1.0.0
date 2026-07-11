@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { getDb } from "../../../../db";
-import { works } from "../../../../db/schema";
+import { favorites, works } from "../../../../db/schema";
 import { getChatGPTUser } from "../../../chatgpt-auth";
 
 export const dynamic = "force-dynamic";
@@ -61,6 +61,7 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
   const [work] = await db.select().from(works).where(and(eq(works.id, Number(id)), eq(works.authorEmail, user.email))).limit(1);
   if (!work) return Response.json({ error: "作品不存在或无权删除" }, { status: 404 });
   if (work.fileKey) { const { env } = await import("cloudflare:workers"); await env.BUCKET.delete(work.fileKey); }
+  await db.delete(favorites).where(eq(favorites.workId, work.id));
   await db.delete(works).where(eq(works.id, work.id));
   return Response.json({ ok: true });
 }

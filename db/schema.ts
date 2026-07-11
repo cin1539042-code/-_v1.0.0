@@ -14,8 +14,16 @@ export const works = sqliteTable("works", {
   coverKey: text("cover_key"),
   externalUrl: text("external_url"),
   status: text("status").notNull().default("published"),
+  playCount: integer("play_count").notNull().default(0),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const favorites = sqliteTable("favorites", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  workId: integer("work_id").notNull(),
+  userEmail: text("user_email").notNull(),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
 export const profiles = sqliteTable("profiles", {
