@@ -1,0 +1,1 @@
+.app-toolbar-actions{display:flex;gap:8px}.app-toolbar-actions button:first-child{color:#ffd94a;border-color:#756f37}@media(max-width:580px){.app-toolbar small{max-width:190px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.app-toolbar-actions button{padding:8px;font-size:11px}}

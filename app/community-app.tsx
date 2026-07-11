@@ -6,6 +6,10 @@ type User = { displayName:string; email:string } | null;
 type Work = { id:number; type:string; title:string; description:string; authorName:string; status?:string; content?:string; appHtml?:string; externalUrl?:string|null; coverUrl?:string|null };
 type Profile = { displayName:string; bio:string; avatar:string; avatarUrl?:string|null };
 const categories=["工具","娱乐","聊天","影音","其他"];
+const STORAGE_CHANNEL="moyu-storage-v1";
+const STORAGE_LIMIT=1024*1024;
+const storageBridge=`<script>(function(){var seq=0,pending=new Map();function call(action,key,value){return new Promise(function(resolve,reject){var id=++seq;pending.set(id,{resolve:resolve,reject:reject});parent.postMessage({channel:'${STORAGE_CHANNEL}',id:id,action:action,key:key,value:value},'*');setTimeout(function(){if(pending.has(id)){pending.delete(id);reject(new Error('存档请求超时'))}},5000)})}window.addEventListener('message',function(e){var m=e.data;if(!m||m.channel!=='${STORAGE_CHANNEL}'||!m.response)return;var p=pending.get(m.id);if(!p)return;pending.delete(m.id);m.ok?p.resolve(m.value):p.reject(new Error(m.error||'存档失败'))});window.MoyuStorage={set:function(k,v){return call('set',k,v)},get:function(k){return call('get',k)},remove:function(k){return call('remove',k)},clear:function(){return call('clear')},keys:function(){return call('keys')}};window.dispatchEvent(new Event('moyu-storage-ready'))})();<\/script>`;
+const withStorageBridge=(html:string)=>html.includes(STORAGE_CHANNEL)?html:html.includes("</head>")?html.replace("</head>",storageBridge+"</head>"):storageBridge+html;
 
 const blankApp = `<!doctype html>
 <html lang="zh-CN">
@@ -23,8 +27,22 @@ const blankApp = `<!doctype html>
   <main class="app">
     <h1>从这里开始自由创作</h1>
     <p id="message">你可以修改全部 HTML、CSS 和 JavaScript。</p>
-    <button onclick="message.textContent='作品运行成功！'">试一下</button>
+    <button id="tryButton">试一下</button>
   </main>
+  <script>
+    let count = 0;
+    async function restore() {
+      const saved = await MoyuStorage.get("clickCount");
+      count = saved || 0;
+      message.textContent = count ? "已为你恢复摸鱼进度：" + count + " 次" : "作品运行成功！";
+    }
+    tryButton.onclick = async () => {
+      count += 1;
+      message.textContent = "已摸鱼 " + count + " 次，进度会自动保留";
+      await MoyuStorage.set("clickCount", count);
+    };
+    restore();
+  </script>
 </body>
 </html>`;
 
@@ -55,6 +73,7 @@ export default function CommunityApp({user}:{user:User}) {
   const fileRef=useRef<HTMLInputElement>(null);
   const coverRef=useRef<HTMLInputElement>(null);
   const avatarRef=useRef<HTMLInputElement>(null);
+  const appFrameRef=useRef<HTMLIFrameElement>(null);
   const [category,setCategory]=useState("全部");
   const [showLogin,setShowLogin]=useState(!user);
   const [moyuSeconds,setMoyuSeconds]=useState(0);
@@ -65,6 +84,8 @@ export default function CommunityApp({user}:{user:User}) {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(()=>{void loadWorks();if(user){void loadProfile();void loadMine()}},[]);
   useEffect(()=>{const timer=window.setInterval(()=>setMoyuSeconds(x=>x+1),1000);return()=>window.clearInterval(timer)},[]);
+  useEffect(()=>{if(!viewer)return;const workId=viewer.id||`preview-${form.title||"untitled"}`;const prefix=`moyu:work:${workId}:`;const onMessage=(event:MessageEvent)=>{if(event.source!==appFrameRef.current?.contentWindow)return;const m=event.data;if(!m||m.channel!==STORAGE_CHANNEL||m.response)return;const reply=(ok:boolean,value?:unknown,error?:string)=>appFrameRef.current?.contentWindow?.postMessage({channel:STORAGE_CHANNEL,response:true,id:m.id,ok,value,error},"*");try{const key=String(m.key||"");if(key.length>100)throw new Error("存档键不能超过100个字符");if(m.action==="get")reply(true,JSON.parse(localStorage.getItem(prefix+key)||"null"));else if(m.action==="keys")reply(true,Object.keys(localStorage).filter(k=>k.startsWith(prefix)).map(k=>k.slice(prefix.length)));else if(m.action==="remove"){localStorage.removeItem(prefix+key);reply(true,true)}else if(m.action==="clear"){Object.keys(localStorage).filter(k=>k.startsWith(prefix)).forEach(k=>localStorage.removeItem(k));reply(true,true)}else if(m.action==="set"){const encoded=JSON.stringify(m.value);if(encoded.length>100*1024)throw new Error("单条存档不能超过100KB");const entries=Object.keys(localStorage).filter(k=>k.startsWith(prefix)&&k!==prefix+key);if(!localStorage.getItem(prefix+key)&&entries.length>=100)throw new Error("每个作品最多保存100个键");const total=entries.reduce((n,k)=>n+(localStorage.getItem(k)?.length||0),0)+encoded.length;if(total>STORAGE_LIMIT)throw new Error("本作品存档已达到1MB上限");localStorage.setItem(prefix+key,encoded);reply(true,true)}else throw new Error("不支持的存档操作")}catch(e){reply(false,undefined,e instanceof Error?e.message:"存档失败")}};window.addEventListener("message",onMessage);return()=>window.removeEventListener("message",onMessage)},[viewer]);
+  const clearViewerStorage=()=>{if(!viewer)return;const prefix=`moyu:work:${viewer.id||`preview-${form.title||"untitled"}`}:`;Object.keys(localStorage).filter(k=>k.startsWith(prefix)).forEach(k=>localStorage.removeItem(k));setMessage(`已清除“${viewer.title}”在本设备上的存档`)};
   const allWorks=[...official,...works].filter(w=>(category==="全部"||w.type===category)&&`${w.title}${w.description}${w.type}${w.authorName}`.toLowerCase().includes(query.toLowerCase()));
 
   const openWork=async(w:Work)=>{if(w.externalUrl){window.open(w.externalUrl,"_blank","noopener,noreferrer");return}if(w.id<0){setViewer({...w,appHtml:blankApp.replace("从这里开始自由创作",w.title)});return}const r=await fetch(`/api/works/${w.id}`);const d=await r.json();if(r.ok){if(d.work.externalUrl)window.open(d.work.externalUrl,"_blank","noopener,noreferrer");else setViewer(d.work)}else setMessage(d.error||"加载失败")};
@@ -99,6 +120,6 @@ export default function CommunityApp({user}:{user:User}) {
 
     {creator&&<div className="overlay" onMouseDown={e=>e.target===e.currentTarget&&setCreator(null)}><section className="modal creator-modal"><button className="close" onClick={()=>setCreator(null)}>×</button><div className="public-profile"><span>{creator.profile.avatar}</span><h2>{creator.profile.displayName}</h2><p>{creator.profile.bio}</p></div><div className="creator-works">{creator.works.map(w=><button key={w.id} onClick={()=>{setCreator(null);void openWork(w)}}><b>{w.title}</b><small>{w.type||"自由创作"}</small></button>)}</div></section></div>}
     {showLogin&&!user&&<div className="overlay"><section className="modal login-modal"><button className="close" onClick={()=>setShowLogin(false)}>×</button><span className="fish">🐟</span><h2>登录摸鱼开发广场</h2><p>登录后可创作、保存草稿、发布作品和管理个人主页。</p><a className="auth-button chatgpt" href="/signin-with-chatgpt?return_to=%2F">使用 ChatGPT 登录</a><a className="auth-button google" href="/signin-with-chatgpt?return_to=%2F">使用 Google 账号登录</a><small>Google 账号通过安全的 ChatGPT 账号登录流程完成验证。</small></section></div>}
-    {viewer&&<div className="overlay app-overlay" onMouseDown={e=>e.target===e.currentTarget&&setViewer(null)}><section className="modal app-modal"><div className="app-toolbar"><div><b>{viewer.title}</b><small>{viewer.type||"自由创作"} · {viewer.authorName}</small></div><button onClick={()=>setViewer(null)}>退出作品 ×</button></div><iframe className="app-frame" title={viewer.title} sandbox="allow-scripts" srcDoc={viewer.appHtml||viewer.content||"<h1>作品暂无内容</h1>"}/></section></div>}
+    {viewer&&<div className="overlay app-overlay" onMouseDown={e=>e.target===e.currentTarget&&setViewer(null)}><section className="modal app-modal"><div className="app-toolbar"><div><b>{viewer.title}</b><small>{viewer.type||"自由创作"} · {viewer.authorName} · 本地存档可用</small></div><div className="app-toolbar-actions"><button onClick={clearViewerStorage}>清除存档</button><button onClick={()=>setViewer(null)}>退出作品 ×</button></div></div><iframe ref={appFrameRef} className="app-frame" title={viewer.title} sandbox="allow-scripts" srcDoc={withStorageBridge(viewer.appHtml||viewer.content||"<h1>作品暂无内容</h1>")}/></section></div>}
   </main>
 }
