@@ -15,6 +15,7 @@ export const works = sqliteTable("works", {
   externalUrl: text("external_url"),
   status: text("status").notNull().default("published"),
   playCount: integer("play_count").notNull().default(0),
+  windowSize: text("window_size").notNull().default("desktop"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
