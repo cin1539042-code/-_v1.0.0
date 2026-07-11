@@ -25,7 +25,7 @@ export async function GET(request: Request) {
     const ids=rows.map(r=>r.id);const favoriteRows=ids.length?await db.select().from(favorites).where(inArray(favorites.workId,ids)):[];
     const favoriteCounts=new Map<number,number>();favoriteRows.forEach(f=>favoriteCounts.set(f.workId,(favoriteCounts.get(f.workId)||0)+1));
     const mineSet=new Set(favoriteRows.filter(f=>f.userEmail===user?.email).map(f=>f.workId));
-    return Response.json({ works: rows.map(row => {const p=profileMap.get(row.authorEmail);return ({ id: row.id, title: row.title, description: row.description, type: row.type, authorName: p?.displayName||row.authorName, authorAvatar:p?.avatarKey?`/api/media?key=${encodeURIComponent(p.avatarKey)}`:null,authorEmoji:p?.avatar||"🐟", status: row.status, externalUrl: row.externalUrl, coverUrl: row.coverKey ? `/api/media?key=${encodeURIComponent(row.coverKey)}` : null, windowSize:row.windowSize,playCount:row.playCount,favoriteCount:favoriteCounts.get(row.id)||0,isFavorited:mineSet.has(row.id),createdAt: row.createdAt,updatedAt:row.updatedAt })}) });
+    return Response.json({ works: rows.map(row => {const p=profileMap.get(row.authorEmail);return ({ id: row.id, title: row.title, description: row.description, type: row.type, authorName: p?.displayName||row.authorName, authorAvatar:p?.avatarKey?`/api/media?key=${encodeURIComponent(p.avatarKey)}`:null,authorEmoji:p?.avatar||"🐟", status: row.status, externalUrl: row.externalUrl, coverUrl: row.coverKey ? `/api/media?key=${encodeURIComponent(row.coverKey)}` : null, windowSize:row.windowSize,windowWidth:row.windowWidth,windowHeight:row.windowHeight,playCount:row.playCount,favoriteCount:favoriteCounts.get(row.id)||0,isFavorited:mineSet.has(row.id),createdAt: row.createdAt,updatedAt:row.updatedAt })}) });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "加载失败" }, { status: 500 });
   }
@@ -45,7 +45,9 @@ export async function POST(request: Request) {
     const file = form.get("file");
     const cover = form.get("cover");
     const externalUrlRaw = String(form.get("externalUrl") || "").trim();
-    const windowSize=["desktop","tablet","mobile","mini"].includes(String(form.get("windowSize")))?String(form.get("windowSize")):"desktop";
+    const windowSize=["desktop","tablet","mobile","mini","custom"].includes(String(form.get("windowSize")))?String(form.get("windowSize")):"desktop";
+    const windowWidth=Math.min(1600,Math.max(320,Number(form.get("windowWidth"))||1200));
+    const windowHeight=Math.min(1000,Math.max(300,Number(form.get("windowHeight"))||800));
     let externalUrl: string | null = null;
     if (!title) return Response.json({ error: "请填写作品名称" }, { status: 400 });
     if (!categories.includes(type)) return Response.json({ error: "请选择作品分类" }, { status: 400 });
@@ -73,7 +75,7 @@ export async function POST(request: Request) {
 
     const db = await getDb();
     const [savedProfile] = await db.select().from(profiles).where(eq(profiles.email,user.email)).limit(1);
-    const [work] = await db.insert(works).values({ title, description, type, content, fileKey, fileName, coverKey, externalUrl, windowSize,status, authorEmail: user.email, authorName: savedProfile?.displayName || user.displayName }).returning();
+    const [work] = await db.insert(works).values({ title, description, type, content, fileKey, fileName, coverKey, externalUrl, windowSize,windowWidth,windowHeight,status, authorEmail: user.email, authorName: savedProfile?.displayName || user.displayName }).returning();
     return Response.json({ work: { ...work, authorEmail: undefined } }, { status: 201 });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "保存失败" }, { status: 500 });
