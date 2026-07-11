@@ -11,6 +11,8 @@ export const works = sqliteTable("works", {
   content: text("content").notNull().default(""),
   fileKey: text("file_key"),
   fileName: text("file_name"),
+  coverKey: text("cover_key"),
+  externalUrl: text("external_url"),
   status: text("status").notNull().default("published"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
@@ -21,6 +23,7 @@ export const profiles = sqliteTable("profiles", {
   displayName: text("display_name").notNull(),
   bio: text("bio").notNull().default("这个人正在认真摸鱼和创造。"),
   avatar: text("avatar").notNull().default("🐟"),
+  avatarKey: text("avatar_key"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
