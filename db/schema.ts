@@ -15,3 +15,12 @@ export const works = sqliteTable("works", {
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+
+export const profiles = sqliteTable("profiles", {
+  email: text("email").primaryKey(),
+  displayName: text("display_name").notNull(),
+  bio: text("bio").notNull().default("这个人正在认真摸鱼和创造。"),
+  avatar: text("avatar").notNull().default("🐟"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});

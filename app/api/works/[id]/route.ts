@@ -9,7 +9,11 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   const { id } = await context.params;
   const db = await getDb();
   const [work] = await db.select().from(works).where(eq(works.id, Number(id))).limit(1);
-  if (!work || work.status !== "published") return Response.json({ error: "作品不存在" }, { status: 404 });
+  if (!work) return Response.json({ error: "作品不存在" }, { status: 404 });
+  if (work.status !== "published") {
+    const user = await getChatGPTUser();
+    if (!user || user.email !== work.authorEmail) return Response.json({ error: "作品不存在" }, { status: 404 });
+  }
   let appHtml = "";
   if (work.fileKey) {
     const { env } = await import("cloudflare:workers");

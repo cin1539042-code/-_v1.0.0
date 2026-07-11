@@ -28,12 +28,11 @@ export async function POST(request: Request) {
     const form = await request.formData();
     const title = String(form.get("title") || "").trim().slice(0, 80);
     const description = String(form.get("description") || "").trim().slice(0, 240);
-    const type = String(form.get("type") || "网页工具");
+    const type = String(form.get("type") || "创意作品").trim().slice(0, 24) || "创意作品";
     const content = String(form.get("content") || "").slice(0, 1024 * 1024);
     const status = form.get("status") === "draft" ? "draft" : "published";
     const file = form.get("file");
     if (!title) return Response.json({ error: "请填写作品名称" }, { status: 400 });
-    if (!["阅读器", "小游戏", "音乐播放器", "资讯窗口", "网页工具"].includes(type)) return Response.json({ error: "作品类型无效" }, { status: 400 });
 
     let fileKey: string | null = null;
     let fileName: string | null = null;
