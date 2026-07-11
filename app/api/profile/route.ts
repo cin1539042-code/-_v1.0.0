@@ -12,9 +12,12 @@ export async function GET(request: Request) {
   const db = await getDb();
   if (!requestedName && !user) return Response.json({ error: "请先登录" }, { status: 401 });
   const name = requestedName || user!.displayName;
-  const [profile] = await db.select().from(profiles).where(eq(profiles.displayName, name)).limit(1);
-  const rows = await db.select().from(works).where(eq(works.authorName, name)).limit(100);
-  return Response.json({ profile: profile ? { displayName: profile.displayName, bio: profile.bio, avatar: profile.avatar, avatarUrl:profile.avatarKey?`/api/media?key=${encodeURIComponent(profile.avatarKey)}`:null } : { displayName: name, bio: "这个人正在认真摸鱼和创造。", avatar: "🐟",avatarUrl:null }, works: rows.filter(w => w.status === "published").map(w => ({ id:w.id,title:w.title,description:w.description,type:w.type,authorName:w.authorName,status:w.status,externalUrl:w.externalUrl,coverUrl:w.coverKey?`/api/media?key=${encodeURIComponent(w.coverKey)}`:null })) });
+  const [profile] = requestedName
+    ? await db.select().from(profiles).where(eq(profiles.displayName, name)).limit(1)
+    : await db.select().from(profiles).where(eq(profiles.email, user!.email)).limit(1);
+  const resolvedName = profile?.displayName || name;
+  const rows = await db.select().from(works).where(eq(works.authorName, resolvedName)).limit(100);
+  return Response.json({ profile: profile ? { displayName: profile.displayName, bio: profile.bio, avatar: profile.avatar, avatarUrl:profile.avatarKey?`/api/media?key=${encodeURIComponent(profile.avatarKey)}`:null } : { displayName: resolvedName, bio: "这个人正在认真摸鱼和创造。", avatar: "🐟",avatarUrl:null }, works: rows.filter(w => w.status === "published").map(w => ({ id:w.id,title:w.title,description:w.description,type:w.type,authorName:w.authorName,status:w.status,externalUrl:w.externalUrl,coverUrl:w.coverKey?`/api/media?key=${encodeURIComponent(w.coverKey)}`:null })) });
 }
 
 export async function PUT(request: Request) {
