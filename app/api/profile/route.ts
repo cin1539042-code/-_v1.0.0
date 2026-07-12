@@ -1,6 +1,6 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { getDb } from "../../../db";
-import { profiles, works } from "../../../db/schema";
+import { follows, profiles, works } from "../../../db/schema";
 import { getChatGPTUser } from "../../chatgpt-auth";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +17,9 @@ export async function GET(request: Request) {
     : await db.select().from(profiles).where(eq(profiles.email, user!.email)).limit(1);
   const resolvedName = profile?.displayName || name;
   const rows = await db.select().from(works).where(eq(works.authorName, resolvedName)).limit(100);
-  return Response.json({ profile: profile ? { displayName: profile.displayName, bio: profile.bio, avatar: profile.avatar, avatarUrl:profile.avatarKey?`/api/media?key=${encodeURIComponent(profile.avatarKey)}`:null } : { displayName: resolvedName, bio: "这个人正在认真摸鱼和创造。", avatar: "🐟",avatarUrl:null }, works: rows.filter(w => w.status === "published").map(w => ({ id:w.id,title:w.title,description:w.description,type:w.type,authorName:w.authorName,status:w.status,externalUrl:w.externalUrl,coverUrl:w.coverKey?`/api/media?key=${encodeURIComponent(w.coverKey)}`:null })) });
+  const followerRows=profile?await db.select().from(follows).where(eq(follows.followingEmail,profile.email)):[];
+  const [myFollow]=profile&&user?await db.select().from(follows).where(and(eq(follows.followerEmail,user.email),eq(follows.followingEmail,profile.email))).limit(1):[];
+  return Response.json({ profile: profile ? { displayName: profile.displayName, bio: profile.bio, avatar: profile.avatar, avatarUrl:profile.avatarKey?`/api/media?key=${encodeURIComponent(profile.avatarKey)}`:null,followerCount:followerRows.length,isFollowing:!!myFollow,isSelf:user?.email===profile.email } : { displayName: resolvedName, bio: "这个人正在认真摸鱼和创造。", avatar: "🐟",avatarUrl:null,followerCount:0,isFollowing:false,isSelf:false }, works: rows.filter(w => w.status === "published").map(w => ({ id:w.id,title:w.title,description:w.description,type:w.type,authorName:w.authorName,status:w.status,externalUrl:w.externalUrl,coverUrl:w.coverKey?`/api/media?key=${encodeURIComponent(w.coverKey)}`:null })) });
 }
 
 export async function PUT(request: Request) {
