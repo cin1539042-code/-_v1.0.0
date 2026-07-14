@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react";
 
 type User = { displayName: string; email: string } | null;
 type Work = {
@@ -273,7 +273,7 @@ export default function CommunityApp({ user }: { user: User }) {
     const timer = window.setInterval(check, 20000);
     return () => window.clearInterval(timer);
   }, [tab, form.title, form.content]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!viewer) return;
     const workId = viewer.id || `preview-${form.title || "untitled"}`;
     const prefix = `moyu:work:${workId}:`;
