@@ -1293,17 +1293,38 @@ export default function CommunityApp({ user }: { user: User }) {
           {user && (
             <>
               <div className="profile-hero">
-                <div className="avatar-editor">
-                  {profile.avatarUrl ? (
-                    <img src={profile.avatarUrl} alt="头像" />
-                  ) : (
-                    <span>{profile.avatar}</span>
-                  )}
-                  <input ref={avatarRef} type="file" accept="image/*" />
-                  <small>点击选择新头像</small>
+                <div className="profile-identity">
+                  <div className="avatar-editor">
+                    {profile.avatarUrl ? (
+                      <img src={profile.avatarUrl} alt="头像" />
+                    ) : (
+                      <span>{profile.avatar}</span>
+                    )}
+                    <label className="avatar-upload">
+                      更换头像
+                      <input ref={avatarRef} type="file" accept="image/*" />
+                    </label>
+                  </div>
+                  <div className="identity-copy">
+                    <small>用户名</small>
+                    <strong>{profile.displayName || user.displayName}</strong>
+                    <small>账号</small>
+                    <span>{user.email}</span>
+                  </div>
                 </div>
-                <div>
-                  <span className="eyebrow">PUBLIC PROFILE</span>
+                <div className="profile-form">
+                  <div className="profile-form-head">
+                    <div>
+                      <span className="eyebrow">PERSONAL PROFILE</span>
+                      <h2>个人资料</h2>
+                    </div>
+                    <div className="account-badge">
+                      <small>账号</small>
+                      <b>{user.email}</b>
+                    </div>
+                  </div>
+                  <label className="profile-field">
+                    <span>用户名</span>
                   <input
                     className="profile-name"
                     value={profile.displayName}
@@ -1311,12 +1332,16 @@ export default function CommunityApp({ user }: { user: User }) {
                       setProfile((p) => ({ ...p, displayName: e.target.value }))
                     }
                   />
+                  </label>
+                  <label className="profile-field">
+                    <span>个人简介</span>
                   <textarea
                     value={profile.bio}
                     onChange={(e) =>
                       setProfile((p) => ({ ...p, bio: e.target.value }))
                     }
                   />
+                  </label>
                   <button className="primary" onClick={saveProfile}>
                     保存个人资料
                   </button>
