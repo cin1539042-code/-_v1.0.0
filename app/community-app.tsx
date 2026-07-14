@@ -666,6 +666,7 @@ export default function CommunityApp({ user }: { user: User }) {
       windowSize: d.work.windowSize || "desktop",
       windowWidth: d.work.windowWidth || 1200,
       windowHeight: d.work.windowHeight || 800,
+      permissions:(()=>{try{const value=JSON.parse(d.work.permissions||'["storage"]');return Array.isArray(value)?value.join(","):"storage"}catch{return String(d.work.permissions||"storage")}})(),
     });
     changeTab("创作中心");
   };
@@ -1135,8 +1136,8 @@ await MoyuSDK.remove("progress");`}</pre></article>
             </label>
             <fieldset className="sdk-permissions">
               <legend>应用能力授权</legend>
-              <div className="permission-row"><input aria-label="启用本地缓存" type="checkbox" checked={form.permissions.includes("storage")} onChange={e=>togglePermission("storage",e.target.checked)}/><span><b>本地缓存</b><small>提供 MoyuSDK.get/set 和兼容的 MoyuStorage</small></span><button type="button" onClick={()=>openDocs("sdk-storage")}>查看文档</button></div>
-              <div className="permission-row"><input aria-label="启用获取用户公开信息" type="checkbox" checked={form.permissions.includes("user.basic")} onChange={e=>togglePermission("user.basic",e.target.checked)}/><span><b>获取用户公开信息</b><small>仅提供登录状态、公开昵称、头像和匿名公开 ID</small></span><button type="button" onClick={()=>openDocs("sdk-user")}>查看文档</button></div>
+              <div className="permission-row"><input aria-label="启用本地缓存" type="checkbox" checked={String(form.permissions||"").includes("storage")} onChange={e=>togglePermission("storage",e.target.checked)}/><span><b>本地缓存</b><small>提供 MoyuSDK.get/set 和兼容的 MoyuStorage</small></span><button type="button" onClick={()=>openDocs("sdk-storage")}>查看文档</button></div>
+              <div className="permission-row"><input aria-label="启用获取用户公开信息" type="checkbox" checked={String(form.permissions||"").includes("user.basic")} onChange={e=>togglePermission("user.basic",e.target.checked)}/><span><b>获取用户公开信息</b><small>仅提供登录状态、公开昵称、头像和匿名公开 ID</small></span><button type="button" onClick={()=>openDocs("sdk-user")}>查看文档</button></div>
             </fieldset>
             <div className="upload-zone">
               <b>作品封面图</b>
