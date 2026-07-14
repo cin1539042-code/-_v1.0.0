@@ -30,6 +30,10 @@ export function validateStaticZip(fileName:string,bytes:Uint8Array){
     files.set(name,data);
   }
   if(files.size>MAX_FILES)throw new Error("文件数量不能超过 300 个");
+  if(!files.has("index.html")){
+    const roots=new Set([...files.keys()].map(name=>name.split("/")[0]));const root=roots.size===1?[...roots][0]:"";
+    if(root&&files.has(`${root}/index.html`)){const normalized=[...files.entries()].map(([name,data])=>[name.slice(root.length+1),data] as const);files.clear();normalized.forEach(([name,data])=>files.set(name,data))}
+  }
   if(!files.has("index.html"))throw new Error("压缩包根目录必须包含 index.html");
   const decoder=new TextDecoder();let html=decoder.decode(files.get("index.html")!);
   const refs=[...html.matchAll(/(?:src|href)\s*=\s*["']([^"']+)["']/gi)].map(x=>x[1]);

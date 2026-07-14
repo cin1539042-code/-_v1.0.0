@@ -490,6 +490,7 @@ export default function CommunityApp({ user }: { user: User }) {
       const allowed=new Set(["html","htm","css","js","mjs","json","png","jpg","jpeg","webp","svg","gif","woff","woff2","ttf","otf","mp3","wav","ogg","m4a"]);
       const files=new Map<string,Uint8Array>();let total=0;
       for(const [raw,data] of entries){const name=raw.replaceAll("\\","/").replace(/^\.\//,"");if(name.startsWith("/")||/^[a-z]:/i.test(name)||name.split("/").includes(".."))throw new Error(`发现危险路径：${raw}`);const ext=(name.split(".").pop()||"").toLowerCase();if(!allowed.has(ext))throw new Error(`不允许的文件类型：${name}`);total+=data.byteLength;if(total>50*1024*1024)throw new Error("解压后总体积不能超过 50MB");files.set(name,data)}
+      if(!files.has("index.html")){const roots=new Set([...files.keys()].map(name=>name.split("/")[0]));const root=roots.size===1?[...roots][0]:"";if(root&&files.has(`${root}/index.html`)){const normalized=[...files.entries()].map(([name,data])=>[name.slice(root.length+1),data] as const);files.clear();normalized.forEach(([name,data])=>files.set(name,data))}}
       if(!files.has("index.html"))throw new Error("压缩包根目录必须包含 index.html");
       packageUrlsRef.current.forEach(URL.revokeObjectURL);packageUrlsRef.current=[];const urls=new Map<string,string>();
       for(const [name,data] of files){if(name==="index.html")continue;const url=URL.createObjectURL(new Blob([data as BlobPart]));urls.set(name,url);packageUrlsRef.current.push(url)}
