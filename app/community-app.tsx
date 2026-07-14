@@ -146,6 +146,7 @@ export default function CommunityApp({ user }: { user: User }) {
     works: Work[];
   } | null>(null);
   const [message, setMessage] = useState("");
+  const [revealedVersion, setRevealedVersion] = useState("");
   const [saving, setSaving] = useState(false);
   const emptyForm = {
     id: 0,
@@ -168,6 +169,8 @@ export default function CommunityApp({ user }: { user: User }) {
   const coverRef = useRef<HTMLInputElement>(null);
   const avatarRef = useRef<HTMLInputElement>(null);
   const appFrameRef = useRef<HTMLIFrameElement>(null);
+  const brandClickCount = useRef(0);
+  const brandClickTimer = useRef<number | null>(null);
   const [category, setCategory] = useState("全部");
   const [showLogin, setShowLogin] = useState(!user);
   const [showStorageDocs, setShowStorageDocs] = useState(false);
@@ -459,6 +462,21 @@ export default function CommunityApp({ user }: { user: User }) {
       void loadFollows();
     }
   };
+  const handleBrandClick = async () => {
+    changeTab("发现功能");
+    brandClickCount.current += 1;
+    if (brandClickTimer.current) window.clearTimeout(brandClickTimer.current);
+    brandClickTimer.current = window.setTimeout(() => { brandClickCount.current = 0; }, 1200);
+    if (brandClickCount.current < 3) return;
+    brandClickCount.current = 0;
+    if (brandClickTimer.current) window.clearTimeout(brandClickTimer.current);
+    try {
+      const response = await fetch("/api/version", { cache: "no-store" });
+      const data = await readApiResponse(response);
+      setRevealedVersion(response.ok ? String(data.version || "未知") : "读取失败");
+    } catch { setRevealedVersion("读取失败"); }
+    window.setTimeout(() => setRevealedVersion(""), 5000);
+  };
   const accountNav = (
     <div className="profile-hub-nav" aria-label="个人中心功能">
       {[
@@ -608,10 +626,11 @@ export default function CommunityApp({ user }: { user: User }) {
   return (
     <main>
       <header className="topbar">
-        <button className="brand" onClick={() => changeTab("发现功能")}>
+        <button className="brand" onClick={handleBrandClick}>
           <span className="fish">🐟</span>
           <span>摸鱼箱</span>
         </button>
+        {revealedVersion&&<div className="hidden-version" role="status">当前版本：{revealedVersion}</div>}
         <nav>
           {["发现功能", "创作中心"].map((x) => (
             <button
