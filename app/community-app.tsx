@@ -26,6 +26,7 @@ type Work = {
   updatedAt?: string;
   hasNewVersion?: boolean;
   permissions?: string;
+  updateNotes?: string;
 };
 type Profile = {
   displayName: string;
@@ -42,13 +43,15 @@ type Profile = {
 };
 type NotificationMessage = {
   id: string;
-  kind: "work-update" | "new-follower";
+  kind: "work-update" | "new-follower" | "direct-message";
   title: string;
   detail: string;
   createdAt: string;
   workId?: number;
   actorName?: string;
+  account?: string;
 };
+type ChatUser = { account:string;displayName:string;avatar:string;avatarUrl?:string|null;unreadCount?:number;content?:string;createdAt?:string };
 const categories = ["工具", "娱乐", "聊天", "影音", "其他"];
 const STORAGE_CHANNEL = "moyu-storage-v1";
 const STORAGE_LIMIT = 1024 * 1024;
@@ -177,6 +180,7 @@ export default function CommunityApp({ user }: { user: User }) {
     windowWidth: 1200,
     windowHeight: 800,
     permissions: "storage",
+    updateNotes: "",
   };
   const [form, setForm] = useState(emptyForm);
   const [profile, setProfile] = useState<Profile>({
@@ -214,6 +218,14 @@ export default function CommunityApp({ user }: { user: User }) {
   const [notifications, setNotifications] = useState<NotificationMessage[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showMessages, setShowMessages] = useState(false);
+  const [messageTab,setMessageTab]=useState<"notices"|"chats">("notices");
+  const [userSearch,setUserSearch]=useState("");
+  const [userResults,setUserResults]=useState<ChatUser[]>([]);
+  const [conversations,setConversations]=useState<ChatUser[]>([]);
+  const [chatTarget,setChatTarget]=useState<ChatUser|null>(null);
+  const [chatMessages,setChatMessages]=useState<any[]>([]);
+  const [chatDraft,setChatDraft]=useState("");
+  const [releaseNotes,setReleaseNotes]=useState<Work|null>(null);
   const [moyuSeconds, setMoyuSeconds] = useState(0);
   const moyuTime = [
     Math.floor(moyuSeconds / 3600),
@@ -267,9 +279,14 @@ export default function CommunityApp({ user }: { user: User }) {
   const openMessages = async () => {
     setShowMessages(true);
     await loadNotifications();
+    await loadConversations();
     const r = await fetch("/api/notifications", { method: "POST" });
     if (r.ok) setUnreadCount(0);
   };
+  const loadConversations=async()=>{const r=await fetch("/api/messages",{cache:"no-store"});const d=await readApiResponse(r);if(r.ok)setConversations(d.conversations||[])};
+  const searchUsers=async()=>{if(userSearch.trim().length<2){setUserResults([]);return}const r=await fetch(`/api/users?q=${encodeURIComponent(userSearch.trim())}`);const d=await readApiResponse(r);if(r.ok)setUserResults(d.users||[])};
+  const openChat=async(target:ChatUser)=>{setChatTarget(target);setMessageTab("chats");const r=await fetch(`/api/messages?account=${encodeURIComponent(target.account)}`,{cache:"no-store"});const d=await readApiResponse(r);if(r.ok){setChatTarget(d.user);setChatMessages(d.messages||[]);void loadNotifications();void loadConversations()}};
+  const sendChat=async()=>{if(!chatTarget||!chatDraft.trim())return;const content=chatDraft.trim();setChatDraft("");const r=await fetch("/api/messages",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({account:chatTarget.account,content})});if(r.ok)void openChat(chatTarget);else{const d=await readApiResponse(r);setMessage(d.error||"发送失败")}};
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
     if(!user)return;
@@ -440,11 +457,12 @@ export default function CommunityApp({ user }: { user: User }) {
     setFishFeedback({ x: event.clientX, y: event.clientY, id: Date.now() });
     const modes = ["dash-away", "reverse-away", "panic-swim"];
     setEscapingFish((state) => ({ ...state, [index]: modes[Math.floor(Math.random() * modes.length)] }));
+    window.setTimeout(() => setEscapingFish((state) => ({ ...state, [index]: "fish-cooldown" })), 1400);
     window.setTimeout(() => setEscapingFish((state) => {
       const next = { ...state };
       delete next[index];
       return next;
-    }), 1400);
+    }), 5500 + Math.random() * 5000);
     window.setTimeout(() => setFishFeedback(null), 850);
   };
   const allWorks = works.filter(
@@ -456,6 +474,7 @@ export default function CommunityApp({ user }: { user: User }) {
   );
 
   const openWork = async (w: Work) => {
+    const shouldShowNotes=!!w.hasNewVersion;
     if(viewer&&viewer.id!==w.id){
       if(minimizedApps.length>=3){setMessage("最多只能同时最小化 3 个应用，请先关闭一个应用");return}
       setMinimizedApps(list=>list.some(x=>x.id===viewer.id)?list:[...list,viewer]);
@@ -472,6 +491,7 @@ export default function CommunityApp({ user }: { user: User }) {
     const r = await fetch(`/api/works/${w.id}`);
     const d = await r.json();
     if (r.ok) {
+      if(shouldShowNotes&&d.work.updateNotes)setReleaseNotes(d.work);
       if (d.work.externalUrl)
         window.open(d.work.externalUrl, "_blank", "noopener,noreferrer");
       else {
@@ -713,6 +733,7 @@ export default function CommunityApp({ user }: { user: User }) {
       windowWidth: d.work.windowWidth || 1200,
       windowHeight: d.work.windowHeight || 800,
       permissions:(()=>{try{const value=JSON.parse(d.work.permissions||'["storage"]');return Array.isArray(value)?value.join(","):"storage"}catch{return String(d.work.permissions||"storage")}})(),
+      updateNotes:d.work.updateNotes||"",
     });
     changeTab("创作中心");
   };
@@ -1181,6 +1202,7 @@ await MoyuSDK.remove("progress");`}</pre></article>
                 }
               />
             </label>
+            {form.id>0&&<label>本次更新说明 <small>用户首次打开新版本时会看到</small><textarea value={form.updateNotes} maxLength={1000} placeholder="例如：新增商店功能，优化加载速度…" onChange={e=>setForm(f=>({...f,updateNotes:e.target.value}))}/></label>}
             <fieldset className="sdk-permissions">
               <legend>应用能力授权</legend>
               <div className="permission-row"><input aria-label="启用本地缓存" type="checkbox" checked={String(form.permissions||"").includes("storage")} onChange={e=>togglePermission("storage",e.target.checked)}/><span><b>本地缓存</b><small>提供 MoyuSDK.get/set 和兼容的 MoyuStorage</small></span><button type="button" onClick={()=>openDocs("sdk-storage")}>查看文档</button></div>
@@ -1596,20 +1618,24 @@ await MoyuSDK.remove("progress");`}</pre></article>
         <div className="message-drawer-backdrop" onClick={() => setShowMessages(false)}>
           <aside className="message-drawer" onClick={(event) => event.stopPropagation()} aria-label="消息中心">
             <header><div><span className="eyebrow">NOTIFICATIONS</span><h2>消息中心</h2></div><button onClick={() => setShowMessages(false)} aria-label="关闭">×</button></header>
-            <div className="message-list">
+            <div className="message-tabs"><button className={messageTab==="notices"?"active":""} onClick={()=>setMessageTab("notices")}>动态提醒</button><button className={messageTab==="chats"?"active":""} onClick={()=>setMessageTab("chats")}>私信</button></div>
+            {messageTab==="notices"?<div className="message-list">
               {notifications.length ? notifications.map((item) => (
                 <button key={item.id} className="message-card" onClick={() => {
+                  if(item.kind==="direct-message"&&item.account){void openChat({account:item.account,displayName:item.actorName||item.account,avatar:"🐟"});return}
                   if (item.workId) {
                     const work = works.find((candidate) => candidate.id === item.workId);
                     if (work) void openWork(work);
                   } else if (item.actorName) void openCreator(item.actorName);
                   setShowMessages(false);
                 }}>
-                  <span className={`message-kind ${item.kind}`}>{item.kind === "work-update" ? "↻" : "+"}</span>
+                  <span className={`message-kind ${item.kind}`}>{item.kind === "work-update" ? "↻" : item.kind==="direct-message"?"✉":"+"}</span>
                   <span><b>{item.title}</b><small>{item.detail}</small><time>{formatDate(item.createdAt)}</time></span>
                 </button>
               )) : <div className="message-empty"><span>🐟</span><b>暂时没有新消息</b><small>有新动态时，小鱼会来提醒你</small></div>}
-            </div>
+            </div>:<div className="chat-panel">
+              {!chatTarget?<><div className="user-search"><input value={userSearch} onChange={e=>setUserSearch(e.target.value)} onKeyDown={e=>e.key==="Enter"&&void searchUsers()} placeholder="输入用户名或账号查找用户"/><button onClick={()=>void searchUsers()}>查找</button></div><div className="conversation-list">{[...userResults,...conversations.filter(c=>!userResults.some(u=>u.account===c.account))].map(person=><button key={person.account} onClick={()=>void openChat(person)}><span className="chat-avatar">{person.avatarUrl?<img src={person.avatarUrl} alt=""/>:person.avatar}</span><span><b>{person.displayName}</b><small>{person.account}</small>{person.content&&<em>{person.content}</em>}</span>{!!person.unreadCount&&<i>{person.unreadCount}</i>}</button>)}</div></>:<><button className="chat-back" onClick={()=>setChatTarget(null)}>← 返回会话</button><div className="chat-with"><b>{chatTarget.displayName}</b><small>{chatTarget.account}</small></div><div className="chat-messages">{chatMessages.map(item=><div key={item.id} className={item.senderEmail===user?.email?"mine":"theirs"}><span>{item.content}</span><small>{new Date(item.createdAt).toLocaleString("zh-CN")}</small></div>)}</div><div className="chat-compose"><textarea value={chatDraft} maxLength={1000} onChange={e=>setChatDraft(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();void sendChat()}}} placeholder="输入私信，Enter 发送"/><button onClick={()=>void sendChat()}>发送</button></div></>}
+            </div>}
           </aside>
         </div>
       )}
@@ -1641,6 +1667,9 @@ await MoyuSDK.remove("progress");`}</pre></article>
               <small>{creator.profile.followerCount || 0} 位关注者</small>
               <div className="creator-today-stats"><span>🐟 今日摸鱼 <b>{creator.profile.todayFishCount||0}</b> 次</span><span>⏱ 今日时长 <b>{formatDuration(creator.profile.todayFishSeconds||0)}</b></span></div>
               {!creator.profile.isSelf && (
+                <button className="secondary" onClick={()=>{const account=(creator.profile as any).account;if(account){setCreator(null);setShowMessages(true);void openChat({account,displayName:creator.profile.displayName,avatar:creator.profile.avatar,avatarUrl:creator.profile.avatarUrl})}}}>私信</button>
+              )}
+              {!creator.profile.isSelf && (
                 <button
                   className={`follow-button ${creator.profile.isFollowing ? "following" : ""}`}
                   onClick={() => toggleFollow(creator.profile.displayName)}
@@ -1666,6 +1695,8 @@ await MoyuSDK.remove("progress");`}</pre></article>
           </section>
         </div>
       )}
+
+      {releaseNotes&&<div className="overlay release-overlay"><section className="modal release-modal"><span className="eyebrow">WHAT'S NEW</span><h2>《{releaseNotes.title}》已更新</h2><p>{releaseNotes.updateNotes}</p><button className="primary" onClick={()=>setReleaseNotes(null)}>知道了，开始体验</button></section></div>}
       {showStorageDocs && (
         <div
           className="overlay"

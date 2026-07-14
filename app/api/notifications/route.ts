@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { ensureNotificationSchema } from "../../../lib/notification-db";
+import { ensureMessageSchema } from "../../../lib/message-db";
 
 export const dynamic = "force-dynamic";
 
@@ -17,9 +18,9 @@ type MessageRow = {
 export async function GET() {
   const user = await getChatGPTUser();
   if (!user) return Response.json({ error: "请先登录" }, { status: 401 });
-  await ensureNotificationSchema();
+  await Promise.all([ensureNotificationSchema(), ensureMessageSchema()]);
   const cutoff = new Date(Date.now() - 30 * 86400_000).toISOString();
-  const [read, updated, followers] = await Promise.all([
+  const [read, updated, followers, direct] = await Promise.all([
     env.DB.prepare("SELECT last_read_at AS lastReadAt FROM notification_reads WHERE user_email=?").bind(user.email).first<{ lastReadAt: string }>(),
     env.DB.prepare(`SELECT w.id,w.title,w.author_name AS authorName,w.updated_at AS createdAt,
       MAX(CASE WHEN f.user_email IS NOT NULL THEN 1 ELSE 0 END) AS isFavorite,
@@ -33,6 +34,9 @@ export async function GET() {
     env.DB.prepare(`SELECT f.id,p.display_name AS actorName,f.created_at AS createdAt
       FROM follows f LEFT JOIN profiles p ON p.email=f.follower_email
       WHERE f.following_email=? AND f.created_at>=? ORDER BY f.created_at DESC LIMIT 20`).bind(user.email, cutoff).all<any>(),
+    env.DB.prepare(`SELECT m.id,m.sender_email AS senderEmail,m.content,m.created_at AS createdAt,p.display_name AS actorName
+      FROM direct_messages m LEFT JOIN profiles p ON p.email=m.sender_email
+      WHERE m.recipient_email=? AND m.read_at IS NULL ORDER BY m.created_at DESC LIMIT 20`).bind(user.email).all<any>(),
   ]);
   const messages: MessageRow[] = [
     ...updated.results.map((row: any) => ({
@@ -52,6 +56,7 @@ export async function GET() {
       createdAt: row.createdAt,
       actorName: row.actorName || undefined,
     })),
+    ...direct.results.map((row:any)=>({id:`dm:${row.id}`,kind:"direct-message" as any,title:`${row.actorName||row.senderEmail} 发来私信`,detail:row.content,createdAt:row.createdAt,actorName:row.actorName,account:row.senderEmail})),
   ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 20);
   const lastReadAt = read?.lastReadAt || "1970-01-01T00:00:00.000Z";
   return Response.json({ messages, unreadCount: messages.filter((item) => new Date(item.createdAt) > new Date(lastReadAt)).length });

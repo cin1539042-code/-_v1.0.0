@@ -19,6 +19,7 @@ export const works = sqliteTable("works", {
   windowWidth: integer("window_width"),
   windowHeight: integer("window_height"),
   permissions: text("permissions").notNull().default('["storage"]'),
+  updateNotes: text("update_notes").notNull().default(""),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
@@ -59,4 +60,13 @@ export const userActivity = sqliteTable("user_activity", {
 export const notificationReads = sqliteTable("notification_reads", {
   userEmail: text("user_email").primaryKey(),
   lastReadAt: text("last_read_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const directMessages = sqliteTable("direct_messages", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  senderEmail: text("sender_email").notNull(),
+  recipientEmail: text("recipient_email").notNull(),
+  content: text("content").notNull(),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  readAt: text("read_at"),
 });

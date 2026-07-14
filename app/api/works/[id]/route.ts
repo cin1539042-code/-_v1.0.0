@@ -24,7 +24,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     const object = await env.BUCKET.get(work.fileKey);
     if (object) appHtml = await object.text();
   }
-  return Response.json({ work: { id: work.id, title: work.title, description: work.description, type: work.type, authorName: work.authorName, content: work.content, fileName: work.fileName, status:work.status, externalUrl:work.externalUrl, windowSize:work.windowSize,windowWidth:work.windowWidth,windowHeight:work.windowHeight,permissions:work.permissions,coverUrl:work.coverKey?`/api/media?key=${encodeURIComponent(work.coverKey)}`:null, createdAt: work.createdAt, appUrl, appHtml: appHtml || work.content } });
+  return Response.json({ work: { id: work.id, title: work.title, description: work.description, type: work.type, authorName: work.authorName, content: work.content, fileName: work.fileName, status:work.status, externalUrl:work.externalUrl, windowSize:work.windowSize,windowWidth:work.windowWidth,windowHeight:work.windowHeight,permissions:work.permissions,updateNotes:work.updateNotes,updatedAt:work.updatedAt,coverUrl:work.coverKey?`/api/media?key=${encodeURIComponent(work.coverKey)}`:null, createdAt: work.createdAt, appUrl, appHtml: appHtml || work.content } });
 }
 
 export async function PUT(request:Request, context:{params:Promise<{id:string}>}) {
@@ -46,7 +46,8 @@ export async function PUT(request:Request, context:{params:Promise<{id:string}>}
   const windowSize=["desktop","tablet","mobile","mini","custom"].includes(String(form.get("windowSize")))?String(form.get("windowSize")):old.windowSize;
   const windowWidth=Math.min(1600,Math.max(320,Number(form.get("windowWidth"))||old.windowWidth||1200));const windowHeight=Math.min(1000,Math.max(300,Number(form.get("windowHeight"))||old.windowHeight||800));
   const requestedPermissions=String(form.get("permissions")||"storage").split(",");const permissions=JSON.stringify(["storage","user.basic"].filter(p=>requestedPermissions.includes(p)));
-  const [work]=await db.update(works).set({title,type,description:String(form.get("description")||"").trim().slice(0,240),content,fileKey,fileName,coverKey,externalUrl,windowSize,windowWidth,windowHeight,permissions,status:form.get("status")==="published"?"published":"draft",updatedAt:new Date().toISOString()}).where(eq(works.id,old.id)).returning();
+  const updateNotes=String(form.get("updateNotes")||"").trim().slice(0,1000);
+  const [work]=await db.update(works).set({title,type,description:String(form.get("description")||"").trim().slice(0,240),content,fileKey,fileName,coverKey,externalUrl,windowSize,windowWidth,windowHeight,permissions,updateNotes,status:form.get("status")==="published"?"published":"draft",updatedAt:new Date().toISOString()}).where(eq(works.id,old.id)).returning();
   return Response.json({work});
 }
 
