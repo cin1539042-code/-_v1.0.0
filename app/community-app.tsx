@@ -36,6 +36,9 @@ type Profile = {
   isFollowing?: boolean;
   isSelf?: boolean;
   workCount?: number;
+  isOnline?: boolean;
+  todayFishCount?: number;
+  todayFishSeconds?: number;
 };
 const categories = ["工具", "娱乐", "聊天", "影音", "其他"];
 const STORAGE_CHANNEL = "moyu-storage-v1";
@@ -72,6 +75,7 @@ const formatDate = (value?: string) =>
         day: "2-digit",
       })
     : "暂无";
+const formatDuration=(seconds:number)=>`${String(Math.floor(seconds/3600)).padStart(2,"0")}:${String(Math.floor(seconds%3600/60)).padStart(2,"0")}:${String(seconds%60).padStart(2,"0")}`;
 const beijingDay = () =>
   new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Shanghai",
@@ -177,6 +181,7 @@ export default function CommunityApp({ user }: { user: User }) {
   const appFrameRef = useRef<HTMLIFrameElement>(null);
   const brandClickCount = useRef(0);
   const brandClickTimer = useRef<number | null>(null);
+  const activityRef=useRef({fishCount:0,fishSeconds:0});
   const [category, setCategory] = useState("全部");
   const [showLogin, setShowLogin] = useState(!user);
   const [showStorageDocs, setShowStorageDocs] = useState(false);
@@ -203,6 +208,7 @@ export default function CommunityApp({ user }: { user: User }) {
   ]
     .map((x) => String(x).padStart(2, "0"))
     .join(":");
+  activityRef.current={fishCount:todayFish,fishSeconds:moyuSeconds};
   const previewScale = Math.min(
     280 / Math.max(form.windowWidth, 1),
     180 / Math.max(form.windowHeight, 1),
@@ -236,6 +242,11 @@ export default function CommunityApp({ user }: { user: User }) {
     if (r.ok) setFollowedCreators(d.creators);
   };
   // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => {
+    if(!user)return;
+    const send=()=>void fetch("/api/activity",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({day:beijingDay(),...activityRef.current})});
+    send();const timer=window.setInterval(send,30000);return()=>window.clearInterval(timer);
+  },[user]);
   useEffect(() => {
     void loadWorks();
     if (user) {
@@ -512,6 +523,7 @@ export default function CommunityApp({ user }: { user: User }) {
     if(checked)current.add(permission);else current.delete(permission);
     return {...f,permissions:[...current].join(",")};
   });
+  const openDocs=(section="sdk-user")=>{changeTab("开发文档");window.setTimeout(()=>document.getElementById(section)?.scrollIntoView({behavior:"smooth"}),0)};
   const handleBrandClick = async () => {
     changeTab("发现功能");
     brandClickCount.current += 1;
@@ -790,6 +802,18 @@ export default function CommunityApp({ user }: { user: User }) {
           摸鱼次数 +1
         </div>
       )}
+      {tab === "开发文档" && <section className="workspace developer-docs-page">
+        <div className="docs-page-head"><span className="eyebrow">MOYU DEVELOPER</span><h1>应用能力文档</h1><p>统一查找 MoyuSDK、本地缓存和用户公开信息接入方式。</p><button className="secondary" onClick={()=>changeTab("创作中心")}>返回创作中心</button></div>
+        <nav className="docs-toc"><a href="#sdk-user">获取用户信息</a><a href="#sdk-storage">本地缓存</a><a href="#sdk-errors">权限与错误</a></nav>
+        <article id="sdk-user"><h2>获取用户公开信息</h2><p>发布或更新作品时先勾选“获取用户公开信息”。平台只提供公开 ID、昵称、头像与登录状态。</p><pre>{`const user = await MoyuSDK.getCurrentUser();
+if (user.isLoggedIn) {
+  console.log(user.id, user.nickname, user.avatar);
+}`}</pre></article>
+        <article id="sdk-storage"><h2>本地缓存</h2><p>勾选“本地缓存”后可使用新接口；旧版 MoyuStorage 保持兼容。</p><pre>{`await MoyuSDK.set("progress", { level: 2, score: 100 });
+const progress = await MoyuSDK.get("progress");
+await MoyuSDK.remove("progress");`}</pre></article>
+        <article id="sdk-errors"><h2>权限与错误</h2><p>未勾选能力时返回 <code>PERMISSION_DENIED</code>；SDK 请求超时返回 <code>SDK_TIMEOUT</code>。应用无法获得邮箱、Cookie、Token 或 Session。</p></article>
+      </section>}
       {tab === "创作中心" && (
         <aside className="storage-notice">
           <div>
@@ -800,7 +824,7 @@ export default function CommunityApp({ user }: { user: User }) {
               <code>MoyuStorage</code> 即可。
             </p>
           </div>
-          <button onClick={() => setShowStorageDocs(true)}>
+          <button onClick={() => openDocs("sdk-storage")}>
             查看接入文档 →
           </button>
         </aside>
@@ -1111,9 +1135,8 @@ export default function CommunityApp({ user }: { user: User }) {
             </label>
             <fieldset className="sdk-permissions">
               <legend>应用能力授权</legend>
-              <label><input type="checkbox" checked={form.permissions.includes("storage")} onChange={e=>togglePermission("storage",e.target.checked)}/><span><b>本地缓存</b><small>提供 MoyuSDK.get/set 和兼容的 MoyuStorage</small></span></label>
-              <label><input type="checkbox" checked={form.permissions.includes("user.basic")} onChange={e=>togglePermission("user.basic",e.target.checked)}/><span><b>获取用户公开信息</b><small>仅提供登录状态、公开昵称、头像和匿名公开 ID</small></span></label>
-              <button type="button" className="secondary" onClick={()=>setShowStorageDocs(true)}>查看 MoyuSDK 接入文档</button>
+              <div className="permission-row"><input aria-label="启用本地缓存" type="checkbox" checked={form.permissions.includes("storage")} onChange={e=>togglePermission("storage",e.target.checked)}/><span><b>本地缓存</b><small>提供 MoyuSDK.get/set 和兼容的 MoyuStorage</small></span><button type="button" onClick={()=>openDocs("sdk-storage")}>查看文档</button></div>
+              <div className="permission-row"><input aria-label="启用获取用户公开信息" type="checkbox" checked={form.permissions.includes("user.basic")} onChange={e=>togglePermission("user.basic",e.target.checked)}/><span><b>获取用户公开信息</b><small>仅提供登录状态、公开昵称、头像和匿名公开 ID</small></span><button type="button" onClick={()=>openDocs("sdk-user")}>查看文档</button></div>
             </fieldset>
             <div className="upload-zone">
               <b>作品封面图</b>
@@ -1518,6 +1541,7 @@ export default function CommunityApp({ user }: { user: User }) {
               ×
             </button>
             <div className="public-profile">
+              <div className="creator-avatar-status">
               {creator.profile.avatarUrl ? (
                 <img
                   className="creator-avatar-image"
@@ -1527,9 +1551,12 @@ export default function CommunityApp({ user }: { user: User }) {
               ) : (
                 <span>{creator.profile.avatar}</span>
               )}
+                <i className={creator.profile.isOnline?"online":"offline"} title={creator.profile.isOnline?"在线":"离线"}/>
+              </div>
               <h2>{creator.profile.displayName}</h2>
               <p>{creator.profile.bio}</p>
               <small>{creator.profile.followerCount || 0} 位关注者</small>
+              <div className="creator-today-stats"><span>🐟 今日摸鱼 <b>{creator.profile.todayFishCount||0}</b> 次</span><span>⏱ 今日时长 <b>{formatDuration(creator.profile.todayFishSeconds||0)}</b></span></div>
               {!creator.profile.isSelf && (
                 <button
                   className={`follow-button ${creator.profile.isFollowing ? "following" : ""}`}

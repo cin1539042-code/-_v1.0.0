@@ -46,3 +46,12 @@ export const profiles = sqliteTable("profiles", {
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+
+export const userActivity = sqliteTable("user_activity", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userEmail: text("user_email").notNull(),
+  activityDay: text("activity_day").notNull(),
+  fishCount: integer("fish_count").notNull().default(0),
+  fishSeconds: integer("fish_seconds").notNull().default(0),
+  lastSeenAt: text("last_seen_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
