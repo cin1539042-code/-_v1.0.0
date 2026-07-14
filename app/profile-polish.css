@@ -310,3 +310,11 @@
 @keyframes loading-bubble { from { transform: translateY(0) scale(.7); opacity: 0; } 25% { opacity: 1; } to { transform: translateY(-55px) scale(1.15); opacity: 0; } }
 @keyframes loading-current { from { transform: translateX(-100%); } to { transform: translateX(230%); } }
 @media (prefers-reduced-motion: reduce) { .loading-fish,.loading-aquarium i,.loading-current em { animation-duration: 3s; } }
+.new-version-badge { position: absolute; right: 12px; top: 12px; z-index: 3; padding: 5px 9px; border: 2px solid #25223b; border-radius: 999px; background: #ff6846; color: white; font-size: 12px; font-weight: 900; box-shadow: 2px 2px 0 #25223b; }
+.minimized-app-stack { position: fixed; right: 22px; bottom: 20px; z-index: 90; display: grid; gap: 10px; width: min(290px,calc(100vw - 32px)); }
+.minimized-app-item { position: relative; }
+.minimized-app-item > button:first-child { width: 100%; min-height: 62px; display: flex; align-items: center; gap: 12px; padding: 10px 44px 10px 14px; border: 2px solid #25223b; border-radius: 15px; background: #fffaf2; box-shadow: 5px 5px 0 #25223b; text-align: left; }
+.minimized-app-item b,.minimized-app-item small { display: block; }
+.minimized-app-item small { margin-top: 3px; color: #77736c; }
+.minimized-close { position: absolute; right: 8px; top: 10px; width: 30px; height: 30px; border: 0; border-radius: 9px; background: #25223b; color: white; font-size: 20px; }
+.minimized-app-item iframe { position: fixed; width: 1px; height: 1px; left: -100px; top: -100px; opacity: 0; pointer-events: none; }

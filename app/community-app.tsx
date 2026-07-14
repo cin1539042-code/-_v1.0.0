@@ -24,6 +24,7 @@ type Work = {
   favoriteCount?: number;
   isFavorited?: boolean;
   updatedAt?: string;
+  hasNewVersion?: boolean;
 };
 type Profile = {
   displayName: string;
@@ -141,6 +142,7 @@ export default function CommunityApp({ user }: { user: User }) {
   const [favoriteWorks, setFavoriteWorks] = useState<Work[]>([]);
   const [followedCreators, setFollowedCreators] = useState<Profile[]>([]);
   const [viewer, setViewer] = useState<Work | null>(null);
+  const [minimizedApps,setMinimizedApps]=useState<Work[]>([]);
   const [creator, setCreator] = useState<{
     profile: Profile;
     works: Work[];
@@ -206,7 +208,10 @@ export default function CommunityApp({ user }: { user: User }) {
   const loadWorks = async () => {
     const r = await fetch("/api/works");
     const d = await r.json();
-    if (r.ok) setWorks(d.works);
+    if (r.ok) setWorks(d.works.map((work:Work)=>{
+      const seen=localStorage.getItem(`moyu:last-played:${work.id}`);
+      return {...work,hasNewVersion:!!seen&&!!work.updatedAt&&seen!==work.updatedAt};
+    }));
   };
   const loadMine = async () => {
     if (!user) return;
@@ -376,6 +381,12 @@ export default function CommunityApp({ user }: { user: User }) {
   );
 
   const openWork = async (w: Work) => {
+    if(viewer&&viewer.id!==w.id){
+      if(minimizedApps.length>=3){setMessage("最多只能同时最小化 3 个应用，请先关闭一个应用");return}
+      setMinimizedApps(list=>list.some(x=>x.id===viewer.id)?list:[...list,viewer]);
+    }
+    if(w.updatedAt)localStorage.setItem(`moyu:last-played:${w.id}`,w.updatedAt);
+    setWorks(list=>list.map(x=>x.id===w.id?{...x,hasNewVersion:false}:x));
     void fetch(`/api/works/${w.id}/play`, { method: "POST" }).then(() =>
       loadWorks(),
     );
@@ -395,6 +406,18 @@ export default function CommunityApp({ user }: { user: User }) {
         setViewer(d.work);
       }
     } else setMessage(d.error || "加载失败");
+  };
+  const minimizeViewer=()=>{
+    if(!viewer)return;
+    if(minimizedApps.some(x=>x.id===viewer.id)){setViewer(null);return}
+    if(minimizedApps.length>=3){setMessage("最多只能同时最小化 3 个应用");return}
+    setMinimizedApps(list=>[...list,viewer]);setViewer(null);setMinimized(false);
+  };
+  const restoreMinimized=(work:Work)=>{
+    if(viewer&&viewer.id!==work.id){
+      setMinimizedApps(list=>[...list.filter(x=>x.id!==work.id),viewer]);
+    }else setMinimizedApps(list=>list.filter(x=>x.id!==work.id));
+    setViewerMode(work.windowSize||"desktop");setViewerReady(!work.appUrl);setViewer(work);
   };
   const openCreator = async (name: string) => {
     const r = await fetch(`/api/profile?name=${encodeURIComponent(name)}`);
@@ -944,6 +967,7 @@ export default function CommunityApp({ user }: { user: User }) {
                       />
                     )}
                     <span className="type">{w.type}</span>
+                    {w.hasNewVersion&&<span className="new-version-badge">新版本</span>}
                     {!w.coverUrl && (
                       <div className="cover-icon">
                         {["📖", "🕹️", "📰", "🎵", "✨", "🧩"][i % 6]}
@@ -1595,7 +1619,7 @@ export default function CommunityApp({ user }: { user: User }) {
               <div className="app-toolbar">
                 <div className="traffic-lights">
                   <button onClick={() => setViewer(null)} title="关闭" />
-                  <button onClick={() => setMinimized(true)} title="最小化" />
+                  <button onClick={minimizeViewer} title="最小化" />
                   <button onClick={() => setViewerMode("full")} title="全屏" />
                 </div>
                 <div className="app-identity">
@@ -1640,7 +1664,7 @@ export default function CommunityApp({ user }: { user: User }) {
                 </div>
                 <div className="app-toolbar-actions">
                   <button onClick={clearViewerStorage}>清除存档</button>
-                  <button onClick={() => setMinimized(true)}>—</button>
+                  <button onClick={minimizeViewer}>—</button>
                   <button onClick={() => setViewer(null)}>×</button>
                 </div>
               </div>
@@ -1676,6 +1700,13 @@ export default function CommunityApp({ user }: { user: User }) {
           )}
         </>
       )}
+      <div className="minimized-app-stack" aria-label="已最小化应用">
+        {minimizedApps.map(work=><div className="minimized-app-item" key={work.id}>
+          <button onClick={()=>restoreMinimized(work)}><span>✨</span><div><b>{work.title}</b><small>点击恢复应用</small></div></button>
+          <button className="minimized-close" onClick={()=>setMinimizedApps(list=>list.filter(x=>x.id!==work.id))} aria-label={`关闭${work.title}`}>×</button>
+          <iframe title={`${work.title}后台运行`} sandbox="allow-scripts allow-same-origin" src={work.appUrl||undefined} srcDoc={work.appUrl?undefined:withStorageBridge(work.appHtml||work.content||"")} />
+        </div>)}
+      </div>
     </main>
   );
 }
