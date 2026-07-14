@@ -1,8 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState, type MouseEvent } from "react";
-import { unzipSync } from "fflate";
-import { extractStaticAssetRefs, rewriteStaticAssetRefs } from "../lib/html-assets";
 
 type User = { displayName: string; email: string } | null;
 type Work = {
@@ -16,6 +14,7 @@ type Work = {
   status?: string;
   content?: string;
   appHtml?: string;
+  appUrl?: string | null;
   externalUrl?: string | null;
   coverUrl?: string | null;
   windowSize?: string;
@@ -154,7 +153,6 @@ export default function CommunityApp({ user }: { user: User }) {
   const coverRef = useRef<HTMLInputElement>(null);
   const avatarRef = useRef<HTMLInputElement>(null);
   const appFrameRef = useRef<HTMLIFrameElement>(null);
-  const packageUrlsRef=useRef<string[]>([]);
   const [category, setCategory] = useState("全部");
   const [showLogin, setShowLogin] = useState(!user);
   const [showStorageDocs, setShowStorageDocs] = useState(false);
@@ -163,6 +161,7 @@ export default function CommunityApp({ user }: { user: User }) {
   const [packageReport,setPackageReport]=useState("");
   const [viewerMode, setViewerMode] = useState("desktop");
   const [minimized, setMinimized] = useState(false);
+  const [viewerReady,setViewerReady]=useState(true);
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [todayFish, setTodayFish] = useState(0);
   const [clockNow, setClockNow] = useState(new Date());
@@ -374,6 +373,7 @@ export default function CommunityApp({ user }: { user: User }) {
       else {
         setViewerMode(d.work.windowSize || "desktop");
         setMinimized(false);
+        setViewerReady(!d.work.appUrl);
         setViewer(d.work);
       }
     } else setMessage(d.error || "加载失败");
@@ -483,23 +483,8 @@ export default function CommunityApp({ user }: { user: User }) {
 
   const previewPackage=async()=>{
     const file=fileRef.current?.files?.[0];if(!file){setMessage("请先选择 ZIP 应用包");return}
-    setSaving(true);setMessage("正在本地检查 ZIP…");
-    try{
-      if(file.size>20*1024*1024)throw new Error("ZIP 不能超过 20MB");
-      const unpacked=unzipSync(new Uint8Array(await file.arrayBuffer()));const entries=Object.entries(unpacked).filter(([name])=>!name.endsWith("/"));
-      if(entries.length>300)throw new Error("文件数量不能超过 300 个");
-      const allowed=new Set(["html","htm","css","js","mjs","json","png","jpg","jpeg","webp","svg","gif","woff","woff2","ttf","otf","mp3","wav","ogg","m4a"]);
-      const files=new Map<string,Uint8Array>();let total=0;
-      for(const [raw,data] of entries){const name=raw.replaceAll("\\","/").replace(/^\.\//,"");if(name.startsWith("/")||/^[a-z]:/i.test(name)||name.split("/").includes(".."))throw new Error(`发现危险路径：${raw}`);const ext=(name.split(".").pop()||"").toLowerCase();if(!allowed.has(ext))throw new Error(`不允许的文件类型：${name}`);total+=data.byteLength;if(total>50*1024*1024)throw new Error("解压后总体积不能超过 50MB");files.set(name,data)}
-      if(!files.has("index.html")){const roots=new Set([...files.keys()].map(name=>name.split("/")[0]));const root=roots.size===1?[...roots][0]:"";if(root&&files.has(`${root}/index.html`)){const normalized=[...files.entries()].map(([name,data])=>[name.slice(root.length+1),data] as const);files.clear();normalized.forEach(([name,data])=>files.set(name,data))}}
-      if(!files.has("index.html"))throw new Error("压缩包根目录必须包含 index.html");
-      packageUrlsRef.current.forEach(URL.revokeObjectURL);packageUrlsRef.current=[];const urls=new Map<string,string>();
-      for(const [name,data] of files){if(name==="index.html")continue;const url=URL.createObjectURL(new Blob([data as BlobPart]));urls.set(name,url);packageUrlsRef.current.push(url)}
-      let html=new TextDecoder().decode(files.get("index.html")!);const refs=extractStaticAssetRefs(html);
-      for(const ref of refs){if(/^(?:[a-z]+:|\/\/|#|data:|blob:)/i.test(ref))continue;const key=ref.split(/[?#]/)[0].replace(/^\.\//,"");if(!files.has(key))throw new Error(`HTML 引用的本地资源不存在：${ref}`)}
-      html=rewriteStaticAssetRefs(html,(ref)=>{if(/^(?:[a-z]+:|\/\/|#|data:|blob:)/i.test(ref))return null;return urls.get(ref.split(/[?#]/)[0].replace(/^\.\//,""))||null});
-      setPackageConfirmed(false);setPackageReport(`校验通过：${files.size} 个文件，解压后 ${(total/1024/1024).toFixed(1)}MB`);setMessage("ZIP 校验通过，请检查预览后确认发布");setViewerMode(form.windowSize);setMinimized(false);setViewer({...form,authorName:user?.displayName||"我",appHtml:html});
-    }catch(error){setPackageConfirmed(false);setPackageReport("");setMessage(error instanceof Error?error.message:"ZIP 校验失败")}finally{setSaving(false)}
+    setSaving(true);setMessage("正在上传、检查并生成静态预览…");const body=new FormData();body.set("file",file);
+    try{const r=await fetch("/api/package/validate",{method:"POST",body});const d=await r.json();if(!r.ok)throw new Error(d.error||"ZIP 校验失败");setPackageConfirmed(false);setPackageReport(`校验通过：${d.fileCount} 个文件，解压后 ${(d.unpackedBytes/1024/1024).toFixed(1)}MB`);setMessage("ZIP 校验通过，请检查预览后确认发布");setViewerMode(form.windowSize);setMinimized(false);setViewerReady(false);setViewer({...form,authorName:user?.displayName||"我",appUrl:d.previewUrl,appHtml:""})}catch(error){setPackageConfirmed(false);setPackageReport("");setMessage(error instanceof Error?error.message:"ZIP 校验失败")}finally{setSaving(false)}
   };
   const save = async (status: "draft" | "published") => {
     if (!user) {
@@ -1612,13 +1597,14 @@ export default function CommunityApp({ user }: { user: User }) {
               </div>
               <iframe
                 ref={appFrameRef}
-                className="app-frame"
+                className={`app-frame ${viewer.appUrl&&!viewerReady?"loading":""}`}
                 title={viewer.title}
                 sandbox="allow-scripts"
-                srcDoc={withStorageBridge(
-                  viewer.appHtml || viewer.content || "<h1>作品暂无内容</h1>",
-                )}
+                src={viewer.appUrl||undefined}
+                srcDoc={viewer.appUrl?undefined:withStorageBridge(viewer.appHtml || viewer.content || "<h1>作品暂无内容</h1>")}
+                onLoad={()=>setViewerReady(true)}
               />
+              {viewer.appUrl&&!viewerReady&&<div className="app-loading">正在加载完整应用资源…</div>}
               <div className="resize-hint">拖动右下角自由调整</div>
             </section>
           </div>

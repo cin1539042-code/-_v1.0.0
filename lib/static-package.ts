@@ -1,11 +1,10 @@
 import { unzipSync } from "fflate";
-import { extractStaticAssetRefs, rewriteStaticAssetRefs } from "./html-assets";
+import { extractStaticAssetRefs } from "./html-assets";
 
 const MAX_ZIP = 20 * 1024 * 1024;
 const MAX_UNPACKED = 50 * 1024 * 1024;
 const MAX_FILES = 300;
-const allowed = new Set(["html","htm","css","js","mjs","json","png","jpg","jpeg","webp","svg","gif","woff","woff2","ttf","otf","mp3","wav","ogg","m4a"]);
-const mime: Record<string,string> = {html:"text/html",htm:"text/html",css:"text/css",js:"text/javascript",mjs:"text/javascript",json:"application/json",png:"image/png",jpg:"image/jpeg",jpeg:"image/jpeg",webp:"image/webp",svg:"image/svg+xml",gif:"image/gif",woff:"font/woff",woff2:"font/woff2",ttf:"font/ttf",otf:"font/otf",mp3:"audio/mpeg",wav:"audio/wav",ogg:"audio/ogg",m4a:"audio/mp4"};
+const allowed = new Set(["html","htm","css","js","mjs","json","png","jpg","jpeg","webp","gif","woff","woff2","ttf","otf","mp3","wav","ogg","m4a"]);
 
 const clean=(name:string)=>name.replaceAll("\\","/").replace(/^\.\//,"");
 const ext=(name:string)=>(name.split(".").pop()||"").toLowerCase();
@@ -15,7 +14,6 @@ const resolve=(base:string,ref:string)=>{
   return parts.join("/");
 };
 const external=(v:string)=>/^(?:[a-z]+:|\/\/|#|data:|blob:)/i.test(v);
-const base64=(data:Uint8Array)=>{let binary="";for(let i=0;i<data.length;i+=8192)binary+=String.fromCharCode(...data.subarray(i,i+8192));return btoa(binary)};
 
 export function validateStaticZip(fileName:string,bytes:Uint8Array){
   if(bytes.byteLength>MAX_ZIP)throw new Error("ZIP 不能超过 20MB");
@@ -39,10 +37,5 @@ export function validateStaticZip(fileName:string,bytes:Uint8Array){
   const decoder=new TextDecoder();let html=decoder.decode(files.get("index.html")!);
   const refs=extractStaticAssetRefs(html);
   for(const ref of refs){if(external(ref))continue;const key=resolve("index.html",ref.split(/[?#]/)[0]);if(!files.has(key))throw new Error(`HTML 引用的本地资源不存在：${ref}`)}
-  html=rewriteStaticAssetRefs(html,(ref)=>{
-    if(external(ref))return null;const plain=ref.split(/[?#]/)[0];const key=resolve("index.html",plain);const data=files.get(key);if(!data)return null;
-    const type=mime[ext(key)]||"application/octet-stream";
-    return `data:${type};base64,${base64(data)}`;
-  });
-  return {html,fileCount:files.size,unpackedBytes:total};
+  return {files,fileCount:files.size,unpackedBytes:total};
 }

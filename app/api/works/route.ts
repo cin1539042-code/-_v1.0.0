@@ -3,6 +3,7 @@ import { getDb } from "../../../db";
 import { favorites, profiles, works } from "../../../db/schema";
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { validateStaticZip } from "../../../lib/static-package";
+import { putStaticFiles } from "../../../lib/static-storage";
 
 export const dynamic = "force-dynamic";
 
@@ -57,16 +58,17 @@ export async function POST(request: Request) {
 
     let fileKey: string | null = null;
     let fileName: string | null = null;
+    let zipFiles:Map<string,Uint8Array>|null=null;
+    let zipVersion:string|null=null;
     if (file instanceof File && file.size > 0) {
       const isZip=file.name.toLowerCase().endsWith(".zip");
       if (!isZip&&file.size > 5 * 1024 * 1024) return Response.json({ error: "HTML 文件不能超过 5MB" }, { status: 400 });
       if (!isZip&&!file.name.toLowerCase().endsWith(".html")) return Response.json({ error: "请选择 HTML 单文件或 ZIP 应用包" }, { status: 400 });
-      fileKey = `works/${crypto.randomUUID()}/${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
       fileName = file.name;
       const { env } = await import("cloudflare:workers");
       const raw=new Uint8Array(await file.arrayBuffer());
-      const body=isZip?validateStaticZip(file.name,raw).html:raw;
-      await env.BUCKET.put(fileKey, body, { httpMetadata: { contentType: "text/html; charset=utf-8" } });
+      if(isZip){zipFiles=validateStaticZip(file.name,raw).files;zipVersion=crypto.randomUUID()}
+      else{fileKey=`works/${crypto.randomUUID()}/${file.name.replace(/[^a-zA-Z0-9._-]/g,"_")}`;await env.BUCKET.put(fileKey,raw,{httpMetadata:{contentType:"text/html; charset=utf-8"}})}
     }
 
     let coverKey: string | null = null;
@@ -79,7 +81,8 @@ export async function POST(request: Request) {
 
     const db = await getDb();
     const [savedProfile] = await db.select().from(profiles).where(eq(profiles.email,user.email)).limit(1);
-    const [work] = await db.insert(works).values({ title, description, type, content, fileKey, fileName, coverKey, externalUrl, windowSize,windowWidth,windowHeight,status, authorEmail: user.email, authorName: savedProfile?.displayName || user.displayName }).returning();
+    let [work] = await db.insert(works).values({ title, description, type, content, fileKey, fileName, coverKey, externalUrl, windowSize,windowWidth,windowHeight,status, authorEmail: user.email, authorName: savedProfile?.displayName || user.displayName }).returning();
+    if(zipFiles&&zipVersion){const prefix=`apps/${work.id}/${zipVersion}/`;const {env}=await import("cloudflare:workers");await putStaticFiles(env.BUCKET,prefix,zipFiles);fileKey=prefix+"index.html";[work]=await db.update(works).set({fileKey}).where(eq(works.id,work.id)).returning()}
     return Response.json({ work: { ...work, authorEmail: undefined } }, { status: 201 });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "保存失败" }, { status: 500 });
