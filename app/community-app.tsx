@@ -1648,12 +1648,17 @@ export default function CommunityApp({ user }: { user: User }) {
                 ref={appFrameRef}
                 className={`app-frame ${viewer.appUrl&&!viewerReady?"loading":""}`}
                 title={viewer.title}
-                sandbox="allow-scripts"
+                sandbox="allow-scripts allow-same-origin"
                 src={viewer.appUrl||undefined}
                 srcDoc={viewer.appUrl?undefined:withStorageBridge(viewer.appHtml || viewer.content || "<h1>作品暂无内容</h1>")}
                 onLoad={()=>setViewerReady(true)}
               />
-              {viewer.appUrl&&!viewerReady&&<div className="app-loading">正在加载完整应用资源…</div>}
+              {viewer.appUrl&&!viewerReady&&<div className="app-loading" role="status" aria-live="polite">
+                <div className="loading-aquarium" aria-hidden="true"><span className="loading-fish">🐟</span><i/><i/><i/></div>
+                <b>正在把应用捞上来…</b>
+                <span>首次打开会准备图片与本地存档</span>
+                <div className="loading-current"><em/></div>
+              </div>}
               <div className="resize-hint">拖动右下角自由调整</div>
             </section>
           </div>

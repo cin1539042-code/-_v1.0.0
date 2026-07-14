@@ -296,3 +296,17 @@
   }
 }
 .hidden-version { position: fixed; left: 82px; top: 82px; z-index: 80; background: #25223b; color: #ffd94a; border: 2px solid #25223b; border-radius: 10px; padding: 7px 11px; font: 800 12px ui-monospace, monospace; box-shadow: 3px 3px 0 #ffd94a; white-space: nowrap; }
+.app-loading { gap: 10px; align-content: center; justify-items: center; background: radial-gradient(circle at 50% 42%, #eefcff 0 18%, #d9f4f1 48%, #fffaf2 100%); color: #25223b; }
+.app-loading b { font-size: 18px; letter-spacing: .04em; }
+.app-loading > span { color: #716b78; font-size: 13px; font-weight: 500; }
+.loading-aquarium { width: 150px; height: 82px; position: relative; overflow: hidden; border: 2px solid #25223b; border-radius: 50%; background: linear-gradient(#c8efff 0 62%,#8eddd8 62%); box-shadow: 5px 6px 0 #ffd94a; }
+.loading-fish { position: absolute; left: 12px; top: 22px; font-size: 36px; animation: loading-swim 1.55s ease-in-out infinite; filter: drop-shadow(0 3px 2px #28506930); }
+.loading-aquarium i { position: absolute; width: 8px; height: 8px; border: 2px solid white; border-radius: 50%; right: 28px; bottom: 13px; animation: loading-bubble 1.4s linear infinite; }
+.loading-aquarium i:nth-of-type(2) { right: 18px; width: 5px; height: 5px; animation-delay: .45s; }
+.loading-aquarium i:nth-of-type(3) { right: 42px; width: 4px; height: 4px; animation-delay: .85s; }
+.loading-current { width: 190px; height: 7px; overflow: hidden; border-radius: 20px; background: #25223b18; }
+.loading-current em { display: block; width: 45%; height: 100%; border-radius: inherit; background: linear-gradient(90deg,#86dddc,#ffd94a,#ff6846); animation: loading-current 1.1s ease-in-out infinite alternate; }
+@keyframes loading-swim { 0% { transform: translateX(0) rotate(-4deg); } 50% { transform: translateX(78px) rotate(4deg) scaleX(1); } 51% { transform: translateX(78px) rotate(4deg) scaleX(-1); } 100% { transform: translateX(0) rotate(-4deg) scaleX(-1); } }
+@keyframes loading-bubble { from { transform: translateY(0) scale(.7); opacity: 0; } 25% { opacity: 1; } to { transform: translateY(-55px) scale(1.15); opacity: 0; } }
+@keyframes loading-current { from { transform: translateX(-100%); } to { transform: translateX(230%); } }
+@media (prefers-reduced-motion: reduce) { .loading-fish,.loading-aquarium i,.loading-current em { animation-duration: 3s; } }
