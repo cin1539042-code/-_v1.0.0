@@ -1,6 +1,6 @@
 .profile-page .profile-hero {
   display: grid;
-  grid-template-columns: 250px minmax(420px, 1fr);
+  grid-template-columns: 360px minmax(420px, 1fr);
   gap: 0;
   width: min(1120px, 100%);
   max-width: none;
@@ -18,26 +18,30 @@
 }
 
 .profile-identity .avatar-editor {
-  position: relative;
-  width: 116px;
-  flex: 0 0 116px;
+  width: 290px;
+  flex: 0 0 290px;
 }
 
 .profile-identity .avatar-editor img,
 .profile-identity .avatar-editor > span {
-  width: 116px;
-  height: 116px;
+  width: 290px;
+  height: 290px;
   border: 3px solid #25223b;
   border-radius: 30px;
   box-shadow: 5px 5px 0 #25223b;
 }
 
 .avatar-upload {
-  position: absolute;
-  inset: 0;
   display: block;
-  border-radius: 30px;
-  font-size: 0;
+  margin-top: 18px;
+  padding: 10px 14px;
+  border: 2px solid #25223b;
+  border-radius: 12px;
+  background: white;
+  box-shadow: 3px 3px 0 #25223b;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 800;
   cursor: pointer;
 }
 
@@ -272,11 +276,11 @@
   .profile-identity .avatar-editor,
   .profile-identity .avatar-editor img,
   .profile-identity .avatar-editor > span {
-    width: 92px;
+    width: min(260px, 75vw);
   }
   .profile-identity .avatar-editor img,
   .profile-identity .avatar-editor > span {
-    height: 92px;
+    height: min(260px, 75vw);
   }
   .profile-form {
     padding: 28px 22px;
