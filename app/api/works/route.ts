@@ -2,6 +2,7 @@ import { desc, eq, inArray } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { favorites, profiles, works } from "../../../db/schema";
 import { getChatGPTUser } from "../../chatgpt-auth";
+import { validateStaticZip } from "../../../lib/static-package";
 
 export const dynamic = "force-dynamic";
 
@@ -57,12 +58,15 @@ export async function POST(request: Request) {
     let fileKey: string | null = null;
     let fileName: string | null = null;
     if (file instanceof File && file.size > 0) {
-      if (file.size > 5 * 1024 * 1024) return Response.json({ error: "文件不能超过 5MB" }, { status: 400 });
-      if (!file.name.toLowerCase().endsWith(".html")) return Response.json({ error: "小应用包必须是可独立运行的 HTML 文件" }, { status: 400 });
+      const isZip=file.name.toLowerCase().endsWith(".zip");
+      if (!isZip&&file.size > 5 * 1024 * 1024) return Response.json({ error: "HTML 文件不能超过 5MB" }, { status: 400 });
+      if (!isZip&&!file.name.toLowerCase().endsWith(".html")) return Response.json({ error: "请选择 HTML 单文件或 ZIP 应用包" }, { status: 400 });
       fileKey = `works/${crypto.randomUUID()}/${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
       fileName = file.name;
       const { env } = await import("cloudflare:workers");
-      await env.BUCKET.put(fileKey, await file.arrayBuffer(), { httpMetadata: { contentType: file.type || "text/plain; charset=utf-8" } });
+      const raw=new Uint8Array(await file.arrayBuffer());
+      const body=isZip?validateStaticZip(file.name,raw).html:raw;
+      await env.BUCKET.put(fileKey, body, { httpMetadata: { contentType: "text/html; charset=utf-8" } });
     }
 
     let coverKey: string | null = null;

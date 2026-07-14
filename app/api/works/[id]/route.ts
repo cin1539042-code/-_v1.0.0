@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { getDb } from "../../../../db";
 import { favorites, works } from "../../../../db/schema";
 import { getChatGPTUser } from "../../../chatgpt-auth";
+import { validateStaticZip } from "../../../../lib/static-package";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +35,7 @@ export async function PUT(request:Request, context:{params:Promise<{id:string}>}
   let externalUrl=String(form.get("externalUrl")||"").trim()||null;
   if(externalUrl){try{const u=new URL(externalUrl);if(!['http:','https:'].includes(u.protocol))throw 0;externalUrl=u.toString()}catch{return Response.json({error:"网页链接无效"},{status:400})}}
   let fileKey=old.fileKey,fileName=old.fileName,coverKey=old.coverKey; const file=form.get("file"),cover=form.get("cover"); const {env}=await import("cloudflare:workers");
-  if(file instanceof File&&file.size){if(file.size>5*1024*1024||!file.name.toLowerCase().endsWith('.html'))return Response.json({error:"HTML 文件不符合要求"},{status:400});if(fileKey)await env.BUCKET.delete(fileKey);fileKey=`works/${crypto.randomUUID()}/${file.name.replace(/[^a-zA-Z0-9._-]/g,'_')}`;fileName=file.name;await env.BUCKET.put(fileKey,await file.arrayBuffer(),{httpMetadata:{contentType:file.type||'text/html'}})}
+  if(file instanceof File&&file.size){const isZip=file.name.toLowerCase().endsWith('.zip');if(!isZip&&(file.size>5*1024*1024||!file.name.toLowerCase().endsWith('.html')))return Response.json({error:"请选择不超过 5MB 的 HTML 或不超过 20MB 的 ZIP 应用包"},{status:400});const raw=new Uint8Array(await file.arrayBuffer());const body=isZip?validateStaticZip(file.name,raw).html:raw;if(fileKey)await env.BUCKET.delete(fileKey);fileKey=`works/${crypto.randomUUID()}/${file.name.replace(/[^a-zA-Z0-9._-]/g,'_')}`;fileName=file.name;await env.BUCKET.put(fileKey,body,{httpMetadata:{contentType:'text/html; charset=utf-8'}})}
   if(cover instanceof File&&cover.size){if(cover.size>3*1024*1024||!cover.type.startsWith('image/'))return Response.json({error:"封面须为不超过 3MB 的图片"},{status:400});if(coverKey)await env.BUCKET.delete(coverKey);coverKey=`covers/${crypto.randomUUID()}/${cover.name.replace(/[^a-zA-Z0-9._-]/g,'_')}`;await env.BUCKET.put(coverKey,await cover.arrayBuffer(),{httpMetadata:{contentType:cover.type}})}
   const content=String(form.get("content")||"").slice(0,1024*1024);if(!fileKey&&!content.trim()&&!externalUrl)return Response.json({error:"作品必须包含可运行内容或网页链接"},{status:400});
   const windowSize=["desktop","tablet","mobile","mini","custom"].includes(String(form.get("windowSize")))?String(form.get("windowSize")):old.windowSize;

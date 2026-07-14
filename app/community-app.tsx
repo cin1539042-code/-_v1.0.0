@@ -155,6 +155,9 @@ export default function CommunityApp({ user }: { user: User }) {
   const [category, setCategory] = useState("全部");
   const [showLogin, setShowLogin] = useState(!user);
   const [showStorageDocs, setShowStorageDocs] = useState(false);
+  const [packageMode,setPackageMode]=useState<"html"|"zip">("html");
+  const [packageConfirmed,setPackageConfirmed]=useState(false);
+  const [packageReport,setPackageReport]=useState("");
   const [viewerMode, setViewerMode] = useState("desktop");
   const [minimized, setMinimized] = useState(false);
   const [updateAvailable, setUpdateAvailable] = useState(false);
@@ -475,6 +478,14 @@ export default function CommunityApp({ user }: { user: User }) {
     setMessage(r.ok ? "个人资料和头像已保存" : d.error || "更新失败");
   };
 
+  const previewPackage=async()=>{
+    const file=fileRef.current?.files?.[0];if(!file){setMessage("请先选择 ZIP 应用包");return}
+    setSaving(true);setMessage("正在检查并解压 ZIP…");const body=new FormData();body.set("file",file);
+    const r=await fetch("/api/package/validate",{method:"POST",body});const d=await r.json();setSaving(false);
+    if(!r.ok){setPackageConfirmed(false);setPackageReport("");setMessage(d.error||"ZIP 校验失败");return}
+    setPackageConfirmed(false);setPackageReport(`校验通过：${d.fileCount} 个文件，解压后 ${(d.unpackedBytes/1024/1024).toFixed(1)}MB`);setMessage("ZIP 校验通过，请检查预览后确认发布");
+    setViewerMode(form.windowSize);setMinimized(false);setViewer({...form,authorName:user?.displayName||"我",appHtml:d.previewHtml});
+  };
   const save = async (status: "draft" | "published") => {
     if (!user) {
       location.href = "/signin-with-chatgpt?return_to=%2F";
@@ -489,6 +500,7 @@ export default function CommunityApp({ user }: { user: User }) {
       return;
     }
     const file = fileRef.current?.files?.[0];
+    if(status==="published"&&packageMode==="zip"&&file&&!packageConfirmed){setMessage("请先生成预览，并确认预览正常后再发布");return}
     if (!file && !form.content.trim() && !form.externalUrl.trim()) {
       setMessage("请在线编写代码、上传 HTML 或填写网页链接");
       return;
@@ -522,6 +534,7 @@ export default function CommunityApp({ user }: { user: User }) {
     );
     setForm(emptyForm);
     if (fileRef.current) fileRef.current.value = "";
+    setPackageConfirmed(false);setPackageReport("");setPackageMode("html");
     if (coverRef.current) coverRef.current.value = "";
     await loadWorks();
     await loadMine();
@@ -1030,14 +1043,21 @@ export default function CommunityApp({ user }: { user: User }) {
                 ))}
               </div>
             </div>
-            <div className="upload-zone">
-              <b>上传 HTML 作品</b>
+            <div className="upload-zone package-upload">
+              <b>上传应用文件</b>
+              <div className="package-tabs">
+                <button className={packageMode==="html"?"active":""} onClick={()=>{setPackageMode("html");setPackageConfirmed(false);setPackageReport("");if(fileRef.current)fileRef.current.value=""}}>单文件 HTML</button>
+                <button className={packageMode==="zip"?"active":""} onClick={()=>{setPackageMode("zip");setPackageConfirmed(false);setPackageReport("");if(fileRef.current)fileRef.current.value=""}}>ZIP 应用包</button>
+              </div>
+              {packageMode==="zip"&&<p>ZIP ≤ 20MB，解压后 ≤ 50MB，最多 300 个静态资源文件；根目录必须包含 index.html。</p>}
               <input
                 className="file"
                 ref={fileRef}
                 type="file"
-                accept=".html,text/html"
+                accept={packageMode==="zip"?".zip,application/zip":".html,text/html"}
+                onChange={()=>{setPackageConfirmed(false);setPackageReport("")}}
               />
+              {packageMode==="zip"&&<div className="package-validation"><button type="button" onClick={previewPackage} disabled={saving}>检查并生成预览</button>{packageReport&&<><span>{packageReport}</span><label><input type="checkbox" checked={packageConfirmed} onChange={e=>setPackageConfirmed(e.target.checked)}/> 我已确认预览正常，可以正式发布</label></>}</div>}
             </div>
             <label>
               在线编辑 HTML / CSS / JavaScript
