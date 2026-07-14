@@ -25,6 +25,7 @@ type Work = {
   isFavorited?: boolean;
   updatedAt?: string;
   hasNewVersion?: boolean;
+  permissions?: string;
 };
 type Profile = {
   displayName: string;
@@ -61,6 +62,8 @@ const withStorageBridge = (html: string) =>
     : html.includes("</head>")
       ? html.replace("</head>", storageBridge + "</head>")
       : storageBridge + html;
+const sdkBridge = `<script>(function(){if(window.MoyuSDK)return;var pending=new Map();function request(method,params){return new Promise(function(resolve,reject){var requestId=(crypto.randomUUID?crypto.randomUUID():Date.now()+'_'+Math.random().toString(36).slice(2));var timer=setTimeout(function(){pending.delete(requestId);var e=new Error('SDK 请求超时');e.code='SDK_TIMEOUT';reject(e)},10000);pending.set(requestId,{resolve:resolve,reject:reject,timer:timer});parent.postMessage({source:'moyu-app',version:'1.0',type:'MOYU_SDK_REQUEST',requestId:requestId,method:method,params:params||{}},'*')})}addEventListener('message',function(e){var m=e.data;if(!m||m.source!=='moyu-platform'||m.type!=='MOYU_SDK_RESPONSE')return;var p=pending.get(m.requestId);if(!p)return;pending.delete(m.requestId);clearTimeout(p.timer);if(m.success)p.resolve(m.data);else{var er=new Error(m.error&&m.error.message||'SDK 请求失败');er.code=m.error&&m.error.code||'INTERNAL_ERROR';p.reject(er)}});window.MoyuSDK={ready:function(){return Promise.resolve()},getCurrentUser:function(){return request('user.getCurrent')},getAppInfo:function(){return request('app.getInfo')},get:function(k){return request('storage.get',{key:k})},set:function(k,v){return request('storage.set',{key:k,value:v})},remove:function(k){return request('storage.remove',{key:k})}};dispatchEvent(new Event('moyu-sdk-ready'))})();<\/script>`;
+const withSdkBridge=(html:string)=>{const base=withStorageBridge(html);return base.includes("moyu-sdk-ready")?base:base.includes("</head>")?base.replace("</head>",sdkBridge+"</head>"):sdkBridge+base};
 const formatDate = (value?: string) =>
   value
     ? new Date(value).toLocaleDateString("zh-CN", {
@@ -160,6 +163,7 @@ export default function CommunityApp({ user }: { user: User }) {
     windowSize: "desktop",
     windowWidth: 1200,
     windowHeight: 800,
+    permissions: "storage",
   };
   const [form, setForm] = useState(emptyForm);
   const [profile, setProfile] = useState<Profile>({
@@ -285,6 +289,24 @@ export default function CommunityApp({ user }: { user: User }) {
     const onMessage = (event: MessageEvent) => {
       if (event.source !== appFrameRef.current?.contentWindow) return;
       const m = event.data;
+      if(m?.source==="moyu-app"&&m?.type==="MOYU_SDK_REQUEST"&&m.requestId){
+        const allowed=(()=>{try{return JSON.parse(viewer.permissions||'["storage"]')}catch{return ["storage"]}})();
+        const respond=(success:boolean,data?:unknown,code?:string,message?:string)=>appFrameRef.current?.contentWindow?.postMessage({source:"moyu-platform",version:"1.0",type:"MOYU_SDK_RESPONSE",requestId:m.requestId,success,data,error:success?undefined:{code,message}},"*");
+        const appId=String(viewer.id||`preview-${form.title||"untitled"}`),key=String(m.params?.key||"");
+        if(m.method==="user.getCurrent"){
+          if(!allowed.includes("user.basic")){respond(false,undefined,"PERMISSION_DENIED","该应用未申请用户公开信息权限");return}
+          let hash=2166136261;for(const ch of user?.email||"")hash=Math.imul(hash^ch.charCodeAt(0),16777619);
+          respond(true,user?{isLoggedIn:true,id:`u_${(hash>>>0).toString(36)}`,nickname:profile.displayName||user.displayName,avatar:profile.avatarUrl||null}:{isLoggedIn:false,id:null,nickname:"游客",avatar:null});return;
+        }
+        if(m.method==="app.getInfo"){respond(true,{appId,name:viewer.title,version:viewer.updatedAt||"preview",previewMode:!viewer.id,ownerUserId:null});return}
+        if(m.method.startsWith("storage.")){
+          if(!allowed.includes("storage")){respond(false,undefined,"PERMISSION_DENIED","该应用未申请本地缓存权限");return}
+          if(!/^[A-Za-z0-9_.-]{1,100}$/.test(key)){respond(false,undefined,"STORAGE_KEY_INVALID","存档键格式无效");return}
+          const storageKey=`moyu:work:${appId}:${key}`;
+          try{if(m.method==="storage.get")respond(true,JSON.parse(localStorage.getItem(storageKey)||"null"));else if(m.method==="storage.set"){localStorage.setItem(storageKey,JSON.stringify(m.params?.value));respond(true,true)}else if(m.method==="storage.remove"){localStorage.removeItem(storageKey);respond(true,true)}else respond(false,undefined,"INVALID_REQUEST","不支持的方法")}catch{respond(false,undefined,"INTERNAL_ERROR","存档操作失败")}return;
+        }
+        respond(false,undefined,"INVALID_REQUEST","不支持的方法");return;
+      }
       if (!m || m.channel !== STORAGE_CHANNEL || m.response) return;
       const reply = (ok: boolean, value?: unknown, error?: string) =>
         appFrameRef.current?.contentWindow?.postMessage(
@@ -485,6 +507,11 @@ export default function CommunityApp({ user }: { user: User }) {
       void loadFollows();
     }
   };
+  const togglePermission=(permission:string,checked:boolean)=>setForm(f=>{
+    const current=new Set(String(f.permissions||"").replace(/[\[\]"]/g,"").split(",").filter(Boolean));
+    if(checked)current.add(permission);else current.delete(permission);
+    return {...f,permissions:[...current].join(",")};
+  });
   const handleBrandClick = async () => {
     changeTab("发现功能");
     brandClickCount.current += 1;
@@ -1082,6 +1109,12 @@ export default function CommunityApp({ user }: { user: User }) {
                 }
               />
             </label>
+            <fieldset className="sdk-permissions">
+              <legend>应用能力授权</legend>
+              <label><input type="checkbox" checked={form.permissions.includes("storage")} onChange={e=>togglePermission("storage",e.target.checked)}/><span><b>本地缓存</b><small>提供 MoyuSDK.get/set 和兼容的 MoyuStorage</small></span></label>
+              <label><input type="checkbox" checked={form.permissions.includes("user.basic")} onChange={e=>togglePermission("user.basic",e.target.checked)}/><span><b>获取用户公开信息</b><small>仅提供登录状态、公开昵称、头像和匿名公开 ID</small></span></label>
+              <button type="button" className="secondary" onClick={()=>setShowStorageDocs(true)}>查看 MoyuSDK 接入文档</button>
+            </fieldset>
             <div className="upload-zone">
               <b>作品封面图</b>
               <p>支持 JPG、PNG、WebP 等图片，最大 3MB。</p>
@@ -1535,15 +1568,33 @@ export default function CommunityApp({ user }: { user: User }) {
               ×
             </button>
             <span className="eyebrow">DEVELOPER GUIDE</span>
-            <h2>为作品接入本地存档</h2>
+            <h2>MoyuSDK 应用能力接入</h2>
             <p>
               平台会在作品运行时自动提供 <code>window.MoyuStorage</code>
               。无需申请权限、无需连接数据库，也不会改变上传与发布步骤。
             </p>
             <div className="docs-grid">
               <article>
+                <b>获取用户公开信息</b>
+                <pre>{`const user = await MoyuSDK.getCurrentUser();
+
+if (user.isLoggedIn) {
+  console.log(user.id, user.nickname, user.avatar);
+} else {
+  console.log("游客");
+}`}</pre>
+                <small>发布或更新时需勾选“获取用户公开信息”。不会提供邮箱、Cookie、Token 或权限字段。</small>
+              </article>
+              <article>
                 <b>保存与读取</b>
                 <pre>{`await MoyuStorage.set("progress", {\n  level: 2,\n  score: 100\n});\n\nconst data = await MoyuStorage.get("progress");`}</pre>
+              </article>
+              <article>
+                <b>新的 MoyuSDK 缓存接口</b>
+                <pre>{`await MoyuSDK.set("progress", { level: 2 });
+const progress = await MoyuSDK.get("progress");
+await MoyuSDK.remove("progress");`}</pre>
+                <small>旧版 MoyuStorage.get/set 继续兼容。</small>
               </article>
               <article>
                 <b>其他操作</b>
@@ -1674,7 +1725,7 @@ export default function CommunityApp({ user }: { user: User }) {
                 title={viewer.title}
                 sandbox="allow-scripts allow-same-origin"
                 src={viewer.appUrl||undefined}
-                srcDoc={viewer.appUrl?undefined:withStorageBridge(viewer.appHtml || viewer.content || "<h1>作品暂无内容</h1>")}
+                srcDoc={viewer.appUrl?undefined:withSdkBridge(viewer.appHtml || viewer.content || "<h1>作品暂无内容</h1>")}
                 onLoad={()=>setViewerReady(true)}
               />
               {viewer.appUrl&&!viewerReady&&<div className="app-loading" role="status" aria-live="polite">
@@ -1704,7 +1755,7 @@ export default function CommunityApp({ user }: { user: User }) {
         {minimizedApps.map(work=><div className="minimized-app-item" key={work.id}>
           <button onClick={()=>restoreMinimized(work)}><span>✨</span><div><b>{work.title}</b><small>点击恢复应用</small></div></button>
           <button className="minimized-close" onClick={()=>setMinimizedApps(list=>list.filter(x=>x.id!==work.id))} aria-label={`关闭${work.title}`}>×</button>
-          <iframe title={`${work.title}后台运行`} sandbox="allow-scripts allow-same-origin" src={work.appUrl||undefined} srcDoc={work.appUrl?undefined:withStorageBridge(work.appHtml||work.content||"")} />
+          <iframe title={`${work.title}后台运行`} sandbox="allow-scripts allow-same-origin" src={work.appUrl||undefined} srcDoc={work.appUrl?undefined:withSdkBridge(work.appHtml||work.content||"")} />
         </div>)}
       </div>
     </main>

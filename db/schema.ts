@@ -18,6 +18,7 @@ export const works = sqliteTable("works", {
   windowSize: text("window_size").notNull().default("desktop"),
   windowWidth: integer("window_width"),
   windowHeight: integer("window_height"),
+  permissions: text("permissions").notNull().default('["storage"]'),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });

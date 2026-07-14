@@ -318,3 +318,10 @@
 .minimized-app-item small { margin-top: 3px; color: #77736c; }
 .minimized-close { position: absolute; right: 8px; top: 10px; width: 30px; height: 30px; border: 0; border-radius: 9px; background: #25223b; color: white; font-size: 20px; }
 .minimized-app-item iframe { position: fixed; width: 1px; height: 1px; left: -100px; top: -100px; opacity: 0; pointer-events: none; }
+.sdk-permissions { margin: 20px 0; padding: 16px; border: 2px solid #25223b; border-radius: 16px; background: #f7fbf8; }
+.sdk-permissions legend { padding: 0 8px; font-weight: 900; }
+.sdk-permissions label { display: flex; align-items: flex-start; gap: 10px; margin: 10px 0; cursor: pointer; }
+.sdk-permissions input { width: 20px; height: 20px; margin-top: 2px; accent-color: #ff6846; }
+.sdk-permissions b,.sdk-permissions small { display: block; }
+.sdk-permissions small { margin-top: 3px; color: #77736c; font-weight: 500; }
+.sdk-permissions button { margin-top: 8px; }

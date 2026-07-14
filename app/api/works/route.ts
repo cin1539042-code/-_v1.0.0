@@ -52,6 +52,8 @@ export async function POST(request: Request) {
     const windowSize=["desktop","tablet","mobile","mini","custom"].includes(String(form.get("windowSize")))?String(form.get("windowSize")):"desktop";
     const windowWidth=Math.min(1600,Math.max(320,Number(form.get("windowWidth"))||1200));
     const windowHeight=Math.min(1000,Math.max(300,Number(form.get("windowHeight"))||800));
+    const requestedPermissions=String(form.get("permissions")||"storage").split(",");
+    const permissions=JSON.stringify(["storage","user.basic"].filter(p=>requestedPermissions.includes(p)));
     let externalUrl: string | null = null;
     if (!title) return Response.json({ error: "请填写作品名称" }, { status: 400 });
     if (!categories.includes(type)) return Response.json({ error: "请选择作品分类" }, { status: 400 });
@@ -84,7 +86,7 @@ export async function POST(request: Request) {
 
     const db = await getDb();
     const [savedProfile] = await db.select().from(profiles).where(eq(profiles.email,user.email)).limit(1);
-    let [work] = await db.insert(works).values({ title, description, type, content, fileKey, fileName, coverKey, externalUrl, windowSize,windowWidth,windowHeight,status, authorEmail: user.email, authorName: savedProfile?.displayName || user.displayName }).returning();
+    let [work] = await db.insert(works).values({ title, description, type, content, fileKey, fileName, coverKey, externalUrl, windowSize,windowWidth,windowHeight,permissions,status, authorEmail: user.email, authorName: savedProfile?.displayName || user.displayName }).returning();
     if(zipFiles&&zipVersion){const prefix=`apps/${work.id}/${zipVersion}/`;const {env}=await import("cloudflare:workers");await putStaticFiles(env.BUCKET,prefix,zipFiles);fileKey=prefix+"index.html";[work]=await db.update(works).set({fileKey}).where(eq(works.id,work.id)).returning()}
     return Response.json({ work: { ...work, authorEmail: undefined } }, { status: 201 });
   } catch (error) {
