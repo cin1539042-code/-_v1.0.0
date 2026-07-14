@@ -4,6 +4,7 @@ import { favorites, profiles, works } from "../../../db/schema";
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { validateStaticZip } from "../../../lib/static-package";
 import { putStaticFiles } from "../../../lib/static-storage";
+import { MAX_ZIP_BYTES, rejectOversizedRequest } from "../../../lib/upload-limits";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +37,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const user = await getChatGPTUser();
   if (!user) return Response.json({ error: "请先使用 ChatGPT 登录" }, { status: 401 });
+  const oversized=rejectOversizedRequest(request);if(oversized)return oversized;
   try {
     const form = await request.formData();
     const title = String(form.get("title") || "").trim().slice(0, 80);
@@ -62,6 +64,7 @@ export async function POST(request: Request) {
     let zipVersion:string|null=null;
     if (file instanceof File && file.size > 0) {
       const isZip=file.name.toLowerCase().endsWith(".zip");
+      if (isZip&&file.size > MAX_ZIP_BYTES) return Response.json({ error: "ZIP 文件不能超过 20MB" }, { status: 413 });
       if (!isZip&&file.size > 5 * 1024 * 1024) return Response.json({ error: "HTML 文件不能超过 5MB" }, { status: 400 });
       if (!isZip&&!file.name.toLowerCase().endsWith(".html")) return Response.json({ error: "请选择 HTML 单文件或 ZIP 应用包" }, { status: 400 });
       fileName = file.name;

@@ -38,6 +38,21 @@ type Profile = {
 const categories = ["工具", "娱乐", "聊天", "影音", "其他"];
 const STORAGE_CHANNEL = "moyu-storage-v1";
 const STORAGE_LIMIT = 1024 * 1024;
+const MAX_ZIP_BYTES = 20 * 1024 * 1024;
+const readApiResponse = async (response: Response) => {
+  const contentType = response.headers.get("content-type") || "";
+  let data: Record<string, any> = {};
+  if (contentType.includes("application/json")) {
+    try { data = await response.json(); } catch { data = {}; }
+  } else {
+    const text = await response.text().catch(() => "");
+    if (text.trim()) data.error = text.trim().slice(0, 300);
+  }
+  if (!response.ok && !data.error) data.error = response.status === 413
+    ? "上传请求过大：ZIP 最大 20MB，请求最大 25MB"
+    : `请求失败（HTTP ${response.status}）`;
+  return data;
+};
 const storageBridge = `<script>(function(){var seq=0,pending=new Map();function call(action,key,value){return new Promise(function(resolve,reject){var id=++seq;pending.set(id,{resolve:resolve,reject:reject});parent.postMessage({channel:'${STORAGE_CHANNEL}',id:id,action:action,key:key,value:value},'*');setTimeout(function(){if(pending.has(id)){pending.delete(id);reject(new Error('存档请求超时'))}},5000)})}window.addEventListener('message',function(e){var m=e.data;if(!m||m.channel!=='${STORAGE_CHANNEL}'||!m.response)return;var p=pending.get(m.id);if(!p)return;pending.delete(m.id);m.ok?p.resolve(m.value):p.reject(new Error(m.error||'存档失败'))});window.MoyuStorage={set:function(k,v){return call('set',k,v)},get:function(k){return call('get',k)},remove:function(k){return call('remove',k)},clear:function(){return call('clear')},keys:function(){return call('keys')}};window.dispatchEvent(new Event('moyu-storage-ready'))})();<\/script>`;
 const withStorageBridge = (html: string) =>
   html.includes(STORAGE_CHANNEL)
@@ -482,9 +497,24 @@ export default function CommunityApp({ user }: { user: User }) {
   };
 
   const previewPackage=async()=>{
-    const file=fileRef.current?.files?.[0];if(!file){setMessage("请先选择 ZIP 应用包");return}
-    setSaving(true);setMessage("正在上传、检查并生成静态预览…");const body=new FormData();body.set("file",file);
-    try{const r=await fetch("/api/package/validate",{method:"POST",body});const d=await r.json();if(!r.ok)throw new Error(d.error||"ZIP 校验失败");setPackageConfirmed(false);setPackageReport(`校验通过：${d.fileCount} 个文件，解压后 ${(d.unpackedBytes/1024/1024).toFixed(1)}MB`);setMessage("ZIP 校验通过，请检查预览后确认发布");setViewerMode(form.windowSize);setMinimized(false);setViewerReady(false);setViewer({...form,authorName:user?.displayName||"我",appUrl:d.previewUrl,appHtml:""})}catch(error){setPackageConfirmed(false);setPackageReport("");setMessage(error instanceof Error?error.message:"ZIP 校验失败")}finally{setSaving(false)}
+    const file=fileRef.current?.files?.[0];
+    if(!file){setMessage("请先选择 ZIP 应用包");return}
+    if(file.size>MAX_ZIP_BYTES){setPackageConfirmed(false);setPackageReport("");setMessage("ZIP 不能超过 20MB");return}
+    setSaving(true);setMessage("正在上传、检查并生成静态预览…");
+    const body=new FormData();body.set("file",file);
+    try{
+      const r=await fetch("/api/package/validate",{method:"POST",body});
+      const d=await readApiResponse(r);
+      if(!r.ok)throw new Error(d.error||"ZIP 校验失败");
+      setPackageConfirmed(false);
+      setPackageReport(`校验通过：${d.fileCount} 个文件，解压后 ${(d.unpackedBytes/1024/1024).toFixed(1)}MB`);
+      setMessage("ZIP 校验通过，请检查预览后确认发布");
+      setViewerMode(form.windowSize);setMinimized(false);setViewerReady(false);
+      setViewer({...form,authorName:user?.displayName||"我",appUrl:d.previewUrl,appHtml:""});
+    }catch(error){
+      setPackageConfirmed(false);setPackageReport("");
+      setMessage(error instanceof Error?error.message:"ZIP 校验失败");
+    }finally{setSaving(false)}
   };
   const save = async (status: "draft" | "published") => {
     if (!user) {
@@ -517,7 +547,7 @@ export default function CommunityApp({ user }: { user: User }) {
       method: form.id ? "PUT" : "POST",
       body,
     });
-    const d = await r.json();
+    const d = await readApiResponse(r);
     setSaving(false);
     if (!r.ok) {
       setMessage(d.error || "保存失败");

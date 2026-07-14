@@ -1,7 +1,7 @@
 import { unzipSync } from "fflate";
 import { extractStaticAssetRefs } from "./html-assets";
+import { MAX_ZIP_BYTES } from "./upload-limits";
 
-const MAX_ZIP = 20 * 1024 * 1024;
 const MAX_UNPACKED = 50 * 1024 * 1024;
 const MAX_FILES = 300;
 const allowed = new Set(["html","htm","css","js","mjs","json","png","jpg","jpeg","webp","gif","woff","woff2","ttf","otf","mp3","wav","ogg","m4a"]);
@@ -16,7 +16,7 @@ const resolve=(base:string,ref:string)=>{
 const external=(v:string)=>/^(?:[a-z]+:|\/\/|#|data:|blob:)/i.test(v);
 
 export function validateStaticZip(fileName:string,bytes:Uint8Array){
-  if(bytes.byteLength>MAX_ZIP)throw new Error("ZIP 不能超过 20MB");
+  if(bytes.byteLength>MAX_ZIP_BYTES)throw new Error("ZIP 不能超过 20MB");
   if(!fileName.toLowerCase().endsWith(".zip"))throw new Error("请选择 ZIP 应用包");
   let unpacked:Record<string,Uint8Array>;
   try{unpacked=unzipSync(bytes)}catch{throw new Error("ZIP 解压失败或压缩包已损坏")}
