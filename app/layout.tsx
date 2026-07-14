@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "摸鱼开发广场",
+  title: "摸鱼箱",
   description: "发现、创作和分享有趣的小作品。",
   icons: {
     icon: "/favicon.svg",

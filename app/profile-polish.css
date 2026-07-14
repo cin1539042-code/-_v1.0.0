@@ -1,6 +1,6 @@
 .profile-page .profile-hero {
   display: grid;
-  grid-template-columns: minmax(270px, 0.8fr) minmax(420px, 1.6fr);
+  grid-template-columns: 250px minmax(420px, 1fr);
   gap: 0;
   width: min(1120px, 100%);
   max-width: none;
@@ -10,9 +10,9 @@
 }
 
 .profile-identity {
-  display: flex;
+  display: grid;
+  place-items: center;
   align-items: center;
-  gap: 22px;
   padding: 42px 34px;
   background: linear-gradient(145deg, #fff2d4, #e7f8f5);
   border-right: 2px solid #25223b;
@@ -54,11 +54,6 @@
   opacity: 0;
 }
 
-.identity-copy {
-  min-width: 0;
-}
-
-.identity-copy small,
 .account-badge small {
   display: block;
   margin: 12px 0 4px;
@@ -66,22 +61,6 @@
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.12em;
-}
-
-.identity-copy strong {
-  display: block;
-  font-size: 25px;
-  line-height: 1.2;
-}
-
-.identity-copy span {
-  display: block;
-  max-width: 190px;
-  overflow: hidden;
-  color: #5f5951;
-  font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .profile-form {
@@ -182,6 +161,52 @@
   font-size: 9px;
 }
 
+.profile-entry {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.profile-entry .profile {
+  display: grid;
+  flex: 0 0 46px;
+  place-items: center;
+}
+
+.profile-entry.active .profile {
+  background: #ffd94a;
+  outline: 3px solid #86dddc;
+}
+
+.topbar-identity {
+  display: block;
+  min-width: 0;
+  max-width: 155px;
+}
+
+.topbar-identity b,
+.topbar-identity small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topbar-identity b {
+  font-size: 13px;
+}
+
+.topbar-identity small {
+  margin-top: 3px;
+  color: #80776e;
+  font-size: 10px;
+}
+
 @media (max-width: 850px) {
   .profile-page .profile-hero {
     grid-template-columns: 1fr;
@@ -189,6 +214,12 @@
   .profile-identity {
     border-right: 0;
     border-bottom: 2px solid #25223b;
+  }
+}
+
+@media (max-width: 1050px) {
+  .topbar-identity {
+    display: none;
   }
 }
 

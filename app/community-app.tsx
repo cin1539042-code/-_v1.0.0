@@ -567,7 +567,7 @@ export default function CommunityApp({ user }: { user: User }) {
       <header className="topbar">
         <button className="brand" onClick={() => changeTab("发现功能")}>
           <span className="fish">🐟</span>
-          <span>摸鱼开发广场</span>
+          <span>摸鱼箱</span>
         </button>
         <nav>
           {["发现功能", "创作中心"].map((x) => (
@@ -592,16 +592,22 @@ export default function CommunityApp({ user }: { user: User }) {
         </div>
         {user ? (
           <button
-            className={`profile ${["个人主页", "我的作品", "我的收藏", "我的关注"].includes(tab) ? "active" : ""}`}
+            className={`profile-entry ${["个人主页", "我的作品", "我的收藏", "我的关注"].includes(tab) ? "active" : ""}`}
             onClick={() => changeTab("个人主页")}
             title="打开个人主页"
           >
-            {profile.avatarUrl ? (
-              <img src={profile.avatarUrl} alt="头像" />
-            ) : (
-              profile.avatar
-            )}
-            <span className="online" />
+            <span className="profile">
+              {profile.avatarUrl ? (
+                <img src={profile.avatarUrl} alt="头像" />
+              ) : (
+                profile.avatar
+              )}
+              <span className="online" />
+            </span>
+            <span className="topbar-identity">
+              <b>{profile.displayName || user.displayName}</b>
+              <small>{user.email}</small>
+            </span>
           </button>
         ) : (
           <button className="login" onClick={() => setShowLogin(true)}>
@@ -1305,12 +1311,6 @@ export default function CommunityApp({ user }: { user: User }) {
                       <input ref={avatarRef} type="file" accept="image/*" />
                     </label>
                   </div>
-                  <div className="identity-copy">
-                    <small>用户名</small>
-                    <strong>{profile.displayName || user.displayName}</strong>
-                    <small>账号</small>
-                    <span>{user.email}</span>
-                  </div>
                 </div>
                 <div className="profile-form">
                   <div className="profile-form-head">
@@ -1487,7 +1487,7 @@ export default function CommunityApp({ user }: { user: User }) {
               ×
             </button>
             <span className="fish">🐟</span>
-            <h2>登录摸鱼开发广场</h2>
+            <h2>登录摸鱼箱</h2>
             <p>登录后可创作、保存草稿、发布作品和管理个人主页。</p>
             <a
               className="auth-button chatgpt"
