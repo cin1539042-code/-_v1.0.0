@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { unzipSync } from "fflate";
+import { extractStaticAssetRefs, rewriteStaticAssetRefs } from "../lib/html-assets";
 
 type User = { displayName: string; email: string } | null;
 type Work = {
@@ -494,9 +495,9 @@ export default function CommunityApp({ user }: { user: User }) {
       if(!files.has("index.html"))throw new Error("压缩包根目录必须包含 index.html");
       packageUrlsRef.current.forEach(URL.revokeObjectURL);packageUrlsRef.current=[];const urls=new Map<string,string>();
       for(const [name,data] of files){if(name==="index.html")continue;const url=URL.createObjectURL(new Blob([data as BlobPart]));urls.set(name,url);packageUrlsRef.current.push(url)}
-      let html=new TextDecoder().decode(files.get("index.html")!);const refs=[...html.matchAll(/(?:src|href)\s*=\s*["']([^"']+)["']/gi)].map(x=>x[1]);
+      let html=new TextDecoder().decode(files.get("index.html")!);const refs=extractStaticAssetRefs(html);
       for(const ref of refs){if(/^(?:[a-z]+:|\/\/|#|data:|blob:)/i.test(ref))continue;const key=ref.split(/[?#]/)[0].replace(/^\.\//,"");if(!files.has(key))throw new Error(`HTML 引用的本地资源不存在：${ref}`)}
-      html=html.replace(/(src|href)\s*=\s*(["'])([^"']+)\2/gi,(all,attr,quote,ref)=>{if(/^(?:[a-z]+:|\/\/|#|data:|blob:)/i.test(ref))return all;const url=urls.get(ref.split(/[?#]/)[0].replace(/^\.\//,""));return url?`${attr}=${quote}${url}${quote}`:all});
+      html=rewriteStaticAssetRefs(html,(ref)=>{if(/^(?:[a-z]+:|\/\/|#|data:|blob:)/i.test(ref))return null;return urls.get(ref.split(/[?#]/)[0].replace(/^\.\//,""))||null});
       setPackageConfirmed(false);setPackageReport(`校验通过：${files.size} 个文件，解压后 ${(total/1024/1024).toFixed(1)}MB`);setMessage("ZIP 校验通过，请检查预览后确认发布");setViewerMode(form.windowSize);setMinimized(false);setViewer({...form,authorName:user?.displayName||"我",appHtml:html});
     }catch(error){setPackageConfirmed(false);setPackageReport("");setMessage(error instanceof Error?error.message:"ZIP 校验失败")}finally{setSaving(false)}
   };

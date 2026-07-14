@@ -1,4 +1,5 @@
 import { unzipSync } from "fflate";
+import { extractStaticAssetRefs, rewriteStaticAssetRefs } from "./html-assets";
 
 const MAX_ZIP = 20 * 1024 * 1024;
 const MAX_UNPACKED = 50 * 1024 * 1024;
@@ -36,12 +37,12 @@ export function validateStaticZip(fileName:string,bytes:Uint8Array){
   }
   if(!files.has("index.html"))throw new Error("压缩包根目录必须包含 index.html");
   const decoder=new TextDecoder();let html=decoder.decode(files.get("index.html")!);
-  const refs=[...html.matchAll(/(?:src|href)\s*=\s*["']([^"']+)["']/gi)].map(x=>x[1]);
+  const refs=extractStaticAssetRefs(html);
   for(const ref of refs){if(external(ref))continue;const key=resolve("index.html",ref.split(/[?#]/)[0]);if(!files.has(key))throw new Error(`HTML 引用的本地资源不存在：${ref}`)}
-  html=html.replace(/(src|href)\s*=\s*(["'])([^"']+)\2/gi,(all,attr,quote,ref)=>{
-    if(external(ref))return all;const plain=ref.split(/[?#]/)[0];const key=resolve("index.html",plain);const data=files.get(key);if(!data)return all;
+  html=rewriteStaticAssetRefs(html,(ref)=>{
+    if(external(ref))return null;const plain=ref.split(/[?#]/)[0];const key=resolve("index.html",plain);const data=files.get(key);if(!data)return null;
     const type=mime[ext(key)]||"application/octet-stream";
-    return `${attr}=${quote}data:${type};base64,${base64(data)}${quote}`;
+    return `data:${type};base64,${base64(data)}`;
   });
   return {html,fileCount:files.size,unpackedBytes:total};
 }
