@@ -245,7 +245,7 @@ export default function CommunityApp({ user }: { user: User }) {
   useEffect(() => {
     if(!user)return;
     const send=()=>void fetch("/api/activity",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({day:beijingDay(),...activityRef.current})});
-    send();const timer=window.setInterval(send,30000);return()=>window.clearInterval(timer);
+    const initial=window.setTimeout(send,1200);const timer=window.setInterval(send,5000);return()=>{window.clearTimeout(initial);window.clearInterval(timer)};
   },[user]);
   useEffect(() => {
     void loadWorks();
@@ -257,7 +257,7 @@ export default function CommunityApp({ user }: { user: User }) {
   useEffect(() => {
     let day = beijingDay();
     setMoyuSeconds(Number(localStorage.getItem(`moyu-seconds:${day}`) || 0));
-    setTodayFish(Number(localStorage.getItem(`moyu-clicks:${day}`) || 0));
+        setTodayFish(Number(localStorage.getItem(`moyu-clicks:${day}`) || 0));
     const timer = window.setInterval(() => {
       const current = beijingDay();
       if (current !== day) {

@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { follows, profiles, userActivity, works } from "../../../db/schema";
 import { getChatGPTUser } from "../../chatgpt-auth";
+import { ensureActivitySchema } from "../../../lib/activity-db";
 
 export const dynamic = "force-dynamic";
 
@@ -9,6 +10,7 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const requestedName = url.searchParams.get("name")?.trim();
   const user = await getChatGPTUser();
+  await ensureActivitySchema();
   const db = await getDb();
   if (!requestedName && !user) return Response.json({ error: "请先登录" }, { status: 401 });
   const name = requestedName || user!.displayName;
