@@ -55,3 +55,8 @@ export const userActivity = sqliteTable("user_activity", {
   fishSeconds: integer("fish_seconds").notNull().default(0),
   lastSeenAt: text("last_seen_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+
+export const notificationReads = sqliteTable("notification_reads", {
+  userEmail: text("user_email").primaryKey(),
+  lastReadAt: text("last_read_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});

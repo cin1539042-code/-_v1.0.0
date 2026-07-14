@@ -40,6 +40,15 @@ type Profile = {
   todayFishCount?: number;
   todayFishSeconds?: number;
 };
+type NotificationMessage = {
+  id: string;
+  kind: "work-update" | "new-follower";
+  title: string;
+  detail: string;
+  createdAt: string;
+  workId?: number;
+  actorName?: string;
+};
 const categories = ["工具", "娱乐", "聊天", "影音", "其他"];
 const STORAGE_CHANNEL = "moyu-storage-v1";
 const STORAGE_LIMIT = 1024 * 1024;
@@ -200,6 +209,11 @@ export default function CommunityApp({ user }: { user: User }) {
     y: number;
     id: number;
   } | null>(null);
+  const [escapingFish, setEscapingFish] = useState<Record<number, string>>({});
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [notifications, setNotifications] = useState<NotificationMessage[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [showMessages, setShowMessages] = useState(false);
   const [moyuSeconds, setMoyuSeconds] = useState(0);
   const moyuTime = [
     Math.floor(moyuSeconds / 3600),
@@ -241,6 +255,21 @@ export default function CommunityApp({ user }: { user: User }) {
     const d = await r.json();
     if (r.ok) setFollowedCreators(d.creators);
   };
+  const loadNotifications = async () => {
+    if (!user) return;
+    const r = await fetch("/api/notifications", { cache: "no-store" });
+    const d = await readApiResponse(r);
+    if (r.ok) {
+      setNotifications(d.messages || []);
+      setUnreadCount(d.unreadCount || 0);
+    }
+  };
+  const openMessages = async () => {
+    setShowMessages(true);
+    await loadNotifications();
+    const r = await fetch("/api/notifications", { method: "POST" });
+    if (r.ok) setUnreadCount(0);
+  };
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
     if(!user)return;
@@ -254,6 +283,12 @@ export default function CommunityApp({ user }: { user: User }) {
       void loadMine();
     }
   }, []);
+  useEffect(() => {
+    if (!user) return;
+    void loadNotifications();
+    const timer = window.setInterval(() => void loadNotifications(), 60_000);
+    return () => window.clearInterval(timer);
+  }, [user]);
   useEffect(() => {
     let day = beijingDay();
     setMoyuSeconds(Number(localStorage.getItem(`moyu-seconds:${day}`) || 0));
@@ -395,7 +430,7 @@ export default function CommunityApp({ user }: { user: User }) {
       setCopyNotice("复制失败，请手动选择代码");
     }
   };
-  const catchFish = (event: MouseEvent<HTMLButtonElement>) => {
+  const catchFish = (event: MouseEvent<HTMLButtonElement>, index: number) => {
     const day = beijingDay();
     setTodayFish((x) => {
       const next = x + 1;
@@ -403,6 +438,13 @@ export default function CommunityApp({ user }: { user: User }) {
       return next;
     });
     setFishFeedback({ x: event.clientX, y: event.clientY, id: Date.now() });
+    const modes = ["dash-away", "reverse-away", "panic-swim"];
+    setEscapingFish((state) => ({ ...state, [index]: modes[Math.floor(Math.random() * modes.length)] }));
+    window.setTimeout(() => setEscapingFish((state) => {
+      const next = { ...state };
+      delete next[index];
+      return next;
+    }), 1400);
     window.setTimeout(() => setFishFeedback(null), 850);
   };
   const allWorks = works.filter(
@@ -571,8 +613,12 @@ export default function CommunityApp({ user }: { user: User }) {
     const f = avatarRef.current?.files?.[0];
     if (f) body.set("avatarFile", f);
     const r = await fetch("/api/profile", { method: "PUT", body });
-    const d = await r.json();
-    if (r.ok) setProfile(d.profile);
+    const d = await readApiResponse(r);
+    if (r.ok) {
+      setProfile({ ...d.profile, avatarUrl: d.profile.avatarUrl ? `${d.profile.avatarUrl}${d.profile.avatarUrl.includes("?") ? "&" : "?"}v=${Date.now()}` : null });
+      setAvatarPreview(null);
+      if (avatarRef.current) avatarRef.current.value = "";
+    }
     setMessage(r.ok ? "个人资料和头像已保存" : d.error || "更新失败");
   };
 
@@ -716,14 +762,14 @@ export default function CommunityApp({ user }: { user: User }) {
           <b>{moyuTime}</b>
         </div>
         {user ? (
-          <button
-            className={`profile-entry ${["个人主页", "我的作品", "我的收藏", "我的关注"].includes(tab) ? "active" : ""}`}
-            onClick={() => changeTab("个人主页")}
-            title="打开个人主页"
-          >
+          <>
+          <button className="message-entry" onClick={() => void openMessages()} title="消息中心" aria-label="打开消息中心">
+            <span>✉</span>{unreadCount > 0 && <i>{unreadCount > 9 ? "9+" : unreadCount}</i>}
+          </button>
+          <button className={`profile-entry ${["个人主页", "我的作品", "我的收藏", "我的关注"].includes(tab) ? "active" : ""}`} onClick={() => changeTab("个人主页")} title="打开个人主页">
             <span className="profile">
-              {profile.avatarUrl ? (
-                <img src={profile.avatarUrl} alt="头像" />
+              {avatarPreview || profile.avatarUrl ? (
+                <img src={avatarPreview || profile.avatarUrl || ""} alt="头像" />
               ) : (
                 profile.avatar
               )}
@@ -734,6 +780,7 @@ export default function CommunityApp({ user }: { user: User }) {
               <small>{user.email}</small>
             </span>
           </button>
+          </>
         ) : (
           <button className="login" onClick={() => setShowLogin(true)}>
             登录 / 注册
@@ -764,8 +811,8 @@ export default function CommunityApp({ user }: { user: User }) {
         {["🐟", "🐠", "🐡", "🐟", "🐠", "🐟", "🐡"].map((fish, i) => (
           <button
             key={i}
-            className={`swimming-fish fish-${i + 1}`}
-            onClick={catchFish}
+            className={`swimming-fish fish-${i + 1} ${escapingFish[i] || ""}`}
+            onClick={(event) => catchFish(event, i)}
             aria-label="摸鱼一次"
           >
             {fish}
@@ -1451,14 +1498,27 @@ await MoyuSDK.remove("progress");`}</pre></article>
               <div className="profile-hero">
                 <div className="profile-identity">
                   <div className="avatar-editor">
-                    {profile.avatarUrl ? (
-                      <img src={profile.avatarUrl} alt="头像" />
+                    {avatarPreview || profile.avatarUrl ? (
+                      <img src={avatarPreview || profile.avatarUrl || ""} alt="头像" />
                     ) : (
                       <span>{profile.avatar}</span>
                     )}
                     <label className="avatar-upload">
                       更换头像
-                      <input ref={avatarRef} type="file" accept="image/*" />
+                      <input ref={avatarRef} type="file" accept="image/*" onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (!file) return;
+                        if (!file.type.startsWith("image/") || file.size > 3 * 1024 * 1024) {
+                          setMessage("头像须为不超过 3MB 的图片");
+                          event.target.value = "";
+                          return;
+                        }
+                        setAvatarPreview((previous) => {
+                          if (previous) URL.revokeObjectURL(previous);
+                          return URL.createObjectURL(file);
+                        });
+                        setMessage("新头像已预览，点击保存个人资料即可生效");
+                      }} />
                     </label>
                   </div>
                 </div>
@@ -1530,6 +1590,28 @@ await MoyuSDK.remove("progress");`}</pre></article>
             </>
           )}
         </section>
+      )}
+
+      {showMessages && (
+        <div className="message-drawer-backdrop" onClick={() => setShowMessages(false)}>
+          <aside className="message-drawer" onClick={(event) => event.stopPropagation()} aria-label="消息中心">
+            <header><div><span className="eyebrow">NOTIFICATIONS</span><h2>消息中心</h2></div><button onClick={() => setShowMessages(false)} aria-label="关闭">×</button></header>
+            <div className="message-list">
+              {notifications.length ? notifications.map((item) => (
+                <button key={item.id} className="message-card" onClick={() => {
+                  if (item.workId) {
+                    const work = works.find((candidate) => candidate.id === item.workId);
+                    if (work) void openWork(work);
+                  } else if (item.actorName) void openCreator(item.actorName);
+                  setShowMessages(false);
+                }}>
+                  <span className={`message-kind ${item.kind}`}>{item.kind === "work-update" ? "↻" : "+"}</span>
+                  <span><b>{item.title}</b><small>{item.detail}</small><time>{formatDate(item.createdAt)}</time></span>
+                </button>
+              )) : <div className="message-empty"><span>🐟</span><b>暂时没有新消息</b><small>有新动态时，小鱼会来提醒你</small></div>}
+            </div>
+          </aside>
+        </div>
       )}
 
       {creator && (
