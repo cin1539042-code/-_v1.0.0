@@ -240,6 +240,7 @@ export default function CommunityApp({ user }: { user: User }) {
   const [adminRows,setAdminRows]=useState<any[]>([]);
   const [feedbackItems,setFeedbackItems]=useState<any[]>([]);
   const [feedbackDraft,setFeedbackDraft]=useState("");
+  const [settings,setSettings]=useState({theme:"system",showFish:true,motion:true,notifications:true});
   const [moyuSeconds, setMoyuSeconds] = useState(0);
   const moyuTime = [
     Math.floor(moyuSeconds / 3600),
@@ -319,12 +320,14 @@ export default function CommunityApp({ user }: { user: User }) {
       void loadMine();
     }
   }, []);
+  useEffect(()=>{try{const saved=JSON.parse(localStorage.getItem("moyu:settings")||"{}");setSettings(current=>({...current,...saved}))}catch{}},[]);
+  useEffect(()=>{const dark=settings.theme==="night"||(settings.theme==="system"&&matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.dataset.theme=dark?"night":"day";document.documentElement.classList.toggle("hide-background-fish",!settings.showFish);document.documentElement.classList.toggle("reduce-moyu-motion",!settings.motion);localStorage.setItem("moyu:settings",JSON.stringify(settings))},[settings]);
   useEffect(() => {
-    if (!user) return;
+    if (!user||!settings.notifications){setUnreadCount(0);return;}
     void loadNotifications();
     const timer = window.setInterval(() => void loadNotifications(), 60_000);
     return () => window.clearInterval(timer);
-  }, [user]);
+  }, [user,settings.notifications]);
   useEffect(()=>{if(!chatTarget)return;const timer=window.setInterval(()=>void refreshChat(chatTarget),2500);return()=>window.clearInterval(timer)},[chatTarget?.account]);
   useEffect(()=>{if(!user)return;void retryOutbox();const online=()=>void retryOutbox();window.addEventListener("online",online);const timer=window.setInterval(()=>void retryOutbox(),15000);return()=>{window.removeEventListener("online",online);window.clearInterval(timer)}},[user]);
   useEffect(() => {
@@ -603,7 +606,7 @@ export default function CommunityApp({ user }: { user: User }) {
     if (next === "我的收藏") void loadFavorites();
     if (next === "我的关注") void loadFollows();
     if (next === "我的粉丝") void loadFollowers();
-    if (next === "反馈信箱") void loadFeedback();
+    if (next === "设置") void loadFeedback();
     if (next === "个人主页") {
       void loadProfile();
       void loadMine();
@@ -648,7 +651,6 @@ export default function CommunityApp({ user }: { user: User }) {
         ["我的收藏", "我的收藏"],
         ["我的关注", "我的关注"],
         ["我的粉丝", "我的粉丝"],
-        ["反馈信箱", "反馈信箱"],
       ].map(([key, label]) => (
         <button
           key={key}
@@ -828,6 +830,7 @@ export default function CommunityApp({ user }: { user: User }) {
           <button className="message-entry" onClick={() => void openMessages()} title="消息中心" aria-label="打开消息中心">
             <span>✉</span>{unreadCount > 0 && <i>{unreadCount > 9 ? "9+" : unreadCount}</i>}
           </button>
+          <button className={`settings-entry ${tab==="设置"?"active":""}`} onClick={()=>changeTab("设置")} title="设置" aria-label="打开设置">⚙</button>
           <button className={`profile-entry ${["个人主页", "我的作品", "我的收藏", "我的关注", "我的粉丝"].includes(tab) ? "active" : ""}`} onClick={() => changeTab("个人主页")} title="打开个人主页">
             <span className="profile">
               {avatarPreview || profile.avatarUrl ? (
@@ -1662,7 +1665,7 @@ await MoyuSDK.remove("progress");`}</pre></article>
 
       {showAdminLogin&&<div className="overlay" onMouseDown={e=>e.target===e.currentTarget&&setShowAdminLogin(false)}><section className="modal admin-login"><button className="close" onClick={()=>setShowAdminLogin(false)}>×</button><span className="eyebrow">ADMIN ACCESS</span><h2>管理员验证</h2><p>请输入当前账号和管理员密码。</p><label>账号<input value={user?.email||""} disabled/></label><label>密码<input type="password" value={adminPassword} onChange={e=>setAdminPassword(e.target.value)} onKeyDown={e=>e.key==="Enter"&&void loginAdmin()} autoFocus/></label>{message&&<div className="toast">{message}</div>}<button className="primary" onClick={()=>void loginAdmin()}>进入管理后台</button></section></div>}
 
-      {tab==="反馈信箱"&&<section className="workspace profile-page">{accountNav}<span className="eyebrow">FEEDBACK</span><h1>反馈信箱</h1><div className="feedback-compose"><h2>向管理员反馈</h2><p>建议、故障和使用问题都可以在这里提交。</p><textarea value={feedbackDraft} maxLength={1000} onChange={e=>setFeedbackDraft(e.target.value)} placeholder="请描述你遇到的问题或建议…"/><button className="primary" onClick={()=>void submitFeedback()}>发送反馈</button></div><div className="feedback-history">{feedbackItems.map(item=><article key={item.id}><header><b>反馈 #{item.id}</b><span className={`feedback-status ${item.status}`}>{item.status==="resolved"?"已解决":item.status==="processing"?"处理中":"待处理"}</span></header><p>{item.content}</p>{item.adminReply&&<blockquote><b>管理员回复</b>{item.adminReply}</blockquote>}<small>{new Date(item.createdAt).toLocaleString("zh-CN")}</small></article>)}</div>{message&&<div className="toast">{message}</div>}</section>}
+      {tab==="设置"&&<section className="workspace settings-page"><span className="eyebrow">SETTINGS</span><h1>设置</h1><div className="settings-grid"><article><h2>外观与体验</h2><div className="setting-row"><span><b>页面主题</b><small>选择白天、黑夜或跟随设备</small></span><select value={settings.theme} onChange={e=>setSettings(s=>({...s,theme:e.target.value}))}><option value="system">跟随系统</option><option value="day">白天模式</option><option value="night">黑夜模式</option></select></div><label className="setting-row"><span><b>显示背景鱼群</b><small>关闭后隐藏页面后方游动的小鱼</small></span><input type="checkbox" checked={settings.showFish} onChange={e=>setSettings(s=>({...s,showFish:e.target.checked}))}/></label><label className="setting-row"><span><b>动画效果</b><small>关闭后减少页面动态效果</small></span><input type="checkbox" checked={settings.motion} onChange={e=>setSettings(s=>({...s,motion:e.target.checked}))}/></label><label className="setting-row"><span><b>消息提醒</b><small>控制消息图标的未读红点和后台检查</small></span><input type="checkbox" checked={settings.notifications} onChange={e=>setSettings(s=>({...s,notifications:e.target.checked}))}/></label></article><article className="feedback-settings"><h2>反馈信箱</h2><p>建议、故障和使用问题都可以在这里提交给管理员。</p><textarea value={feedbackDraft} maxLength={1000} onChange={e=>setFeedbackDraft(e.target.value)} placeholder="请描述你遇到的问题或建议…"/><button className="primary" onClick={()=>void submitFeedback()}>发送反馈</button></article></div><div className="feedback-history">{feedbackItems.map(item=><article key={item.id}><header><b>反馈 #{item.id}</b><span className={`feedback-status ${item.status}`}>{item.status==="resolved"?"已解决":item.status==="processing"?"处理中":"待处理"}</span></header><p>{item.content}</p>{item.adminReply&&<blockquote><b>管理员回复</b>{item.adminReply}</blockquote>}<small>{new Date(item.createdAt).toLocaleString("zh-CN")}</small></article>)}</div>{message&&<div className="toast">{message}</div>}</section>}
 
       {tab==="管理后台"&&adminData&&<section className="workspace admin-detail-console"><h2>数据与内容管理</h2><div className="admin-resource-tabs"><button onClick={()=>void loadAdminResource("users")}>注册用户 · 查看详情</button><button onClick={()=>void loadAdminResource("works")}>全部作品 · 查看详情</button><button onClick={()=>void loadAdminResource("feedback")}>反馈信箱 · {adminData.stats.feedback||0} 条待处理</button></div>{adminResource&&<div className="admin-data-list">{adminResource==="users"&&adminRows.map(row=><article key={row.email}><div><b>{row.displayName}</b><small>{row.email}</small><p>{row.workCount} 个作品 · {row.followerCount} 位粉丝 · 注册于 {formatDate(row.createdAt)}</p></div><button className={row.status==="suspended"?"primary":"secondary"} onClick={()=>void moderate({action:"user-status",email:row.email,status:row.status==="suspended"?"active":"suspended"})}>{row.status==="suspended"?"恢复账号":"停用账号"}</button></article>)}{adminResource==="works"&&adminRows.map(row=><article key={row.id}><div><b>#{row.id} {row.title}</b><small>{row.authorName} · {row.authorEmail}</small><p>{row.type} · 打开 {row.playCount} 次 · {row.status==="published"?"已发布":"已下架"}</p></div><button className={row.status==="published"?"secondary":"primary"} onClick={()=>void moderate({action:"work-status",id:row.id,status:row.status==="published"?"draft":"published"})}>{row.status==="published"?"下架作品":"恢复发布"}</button></article>)}{adminResource==="feedback"&&adminRows.map(row=><article key={row.id}><div><b>反馈 #{row.id} · {row.userEmail}</b><p>{row.content}</p>{row.adminReply&&<small>已回复：{row.adminReply}</small>}</div><div className="admin-row-actions"><button onClick={()=>{const reply=window.prompt("回复用户",row.adminReply||"");if(reply!==null)void moderate({action:"feedback-status",id:row.id,status:"resolved",reply})}}>回复并解决</button><button onClick={()=>void moderate({action:"feedback-status",id:row.id,status:"processing",reply:row.adminReply||""})}>标记处理中</button></div></article>)}</div>}</section>}
 
