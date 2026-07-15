@@ -285,8 +285,9 @@ export default function CommunityApp({ user }: { user: User }) {
   };
   const loadConversations=async()=>{const r=await fetch("/api/messages",{cache:"no-store"});const d=await readApiResponse(r);if(r.ok)setConversations(d.conversations||[])};
   const searchUsers=async()=>{if(userSearch.trim().length<2){setUserResults([]);return}const r=await fetch(`/api/users?q=${encodeURIComponent(userSearch.trim())}`);const d=await readApiResponse(r);if(r.ok)setUserResults(d.users||[])};
-  const openChat=async(target:ChatUser)=>{setChatTarget(target);setMessageTab("chats");const r=await fetch(`/api/messages?account=${encodeURIComponent(target.account)}`,{cache:"no-store"});const d=await readApiResponse(r);if(r.ok){setChatTarget(d.user);setChatMessages(d.messages||[]);void loadNotifications();void loadConversations()}};
-  const sendChat=async()=>{if(!chatTarget||!chatDraft.trim())return;const content=chatDraft.trim();setChatDraft("");const r=await fetch("/api/messages",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({account:chatTarget.account,content})});if(r.ok)void openChat(chatTarget);else{const d=await readApiResponse(r);setMessage(d.error||"发送失败")}};
+  const refreshChat=async(target:ChatUser,foreground=false)=>{const r=await fetch(`/api/messages?account=${encodeURIComponent(target.account)}`,{cache:"no-store"});const d=await readApiResponse(r);if(r.ok){if(foreground){setChatTarget(d.user);void loadNotifications();void loadConversations()}setChatMessages(d.messages||[])}};
+  const openChat=async(target:ChatUser)=>{setChatTarget(target);setMessageTab("chats");await refreshChat(target,true)};
+  const sendChat=async()=>{if(!chatTarget||!chatDraft.trim())return;const content=chatDraft.trim(),target=chatTarget,tempId=`temp-${Date.now()}`;setChatDraft("");setChatMessages(list=>[...list,{id:tempId,senderEmail:user?.email,recipientEmail:target.account,content,createdAt:new Date().toISOString()}]);const r=await fetch("/api/messages",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({account:target.account,content})});if(r.ok)void refreshChat(target);else{setChatMessages(list=>list.filter(item=>item.id!==tempId));const d=await readApiResponse(r);setMessage(d.error||"发送失败")}};
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
     if(!user)return;
@@ -306,6 +307,7 @@ export default function CommunityApp({ user }: { user: User }) {
     const timer = window.setInterval(() => void loadNotifications(), 60_000);
     return () => window.clearInterval(timer);
   }, [user]);
+  useEffect(()=>{if(!chatTarget)return;const timer=window.setInterval(()=>void refreshChat(chatTarget),2500);return()=>window.clearInterval(timer)},[chatTarget?.account]);
   useEffect(() => {
     let day = beijingDay();
     setMoyuSeconds(Number(localStorage.getItem(`moyu-seconds:${day}`) || 0));
@@ -448,6 +450,9 @@ export default function CommunityApp({ user }: { user: User }) {
     }
   };
   const catchFish = (event: MouseEvent<HTMLButtonElement>, index: number) => {
+    const fish=event.currentTarget;
+    if(fish.dataset.escaping==="1")return;
+    fish.dataset.escaping="1";
     const day = beijingDay();
     setTodayFish((x) => {
       const next = x + 1;
@@ -455,14 +460,19 @@ export default function CommunityApp({ user }: { user: User }) {
       return next;
     });
     setFishFeedback({ x: event.clientX, y: event.clientY, id: Date.now() });
-    const modes = ["dash-away", "reverse-away", "panic-swim"];
-    setEscapingFish((state) => ({ ...state, [index]: modes[Math.floor(Math.random() * modes.length)] }));
-    window.setTimeout(() => setEscapingFish((state) => ({ ...state, [index]: "fish-cooldown" })), 1400);
+    const direction=Math.random()>.5?1:-1;
+    const wild=Math.random()>.55;
+    const animation=fish.animate(wild?
+      [{transform:"scaleX(-1) translate(0,0)"},{transform:`scaleX(${direction}) translate(${direction*55}px,-32px) rotate(15deg)`,offset:.28},{transform:`scaleX(${-direction}) translate(${direction*140}px,25px) rotate(-12deg)`,offset:.62},{transform:`scaleX(${direction}) translate(${direction*320}px,-18px) rotate(5deg)`,opacity:0}]:
+      [{transform:"scaleX(-1) translateX(0)",opacity:1},{transform:`scaleX(${direction}) translateX(${direction*360}px) rotate(${direction*8}deg)`,opacity:0}],
+      {duration:wild?900:720,easing:"cubic-bezier(.18,.8,.25,1)",fill:"forwards"});
+    animation.onfinish=()=>setEscapingFish((state) => ({ ...state, [index]: "fish-cooldown" }));
     window.setTimeout(() => setEscapingFish((state) => {
       const next = { ...state };
       delete next[index];
+      window.requestAnimationFrame(()=>window.requestAnimationFrame(()=>{animation.cancel();delete fish.dataset.escaping}));
       return next;
-    }), 5500 + Math.random() * 5000);
+    }), 6000 + Math.random() * 5000);
     window.setTimeout(() => setFishFeedback(null), 850);
   };
   const allWorks = works.filter(
@@ -1634,7 +1644,7 @@ await MoyuSDK.remove("progress");`}</pre></article>
                 </button>
               )) : <div className="message-empty"><span>🐟</span><b>暂时没有新消息</b><small>有新动态时，小鱼会来提醒你</small></div>}
             </div>:<div className="chat-panel">
-              {!chatTarget?<><div className="user-search"><input value={userSearch} onChange={e=>setUserSearch(e.target.value)} onKeyDown={e=>e.key==="Enter"&&void searchUsers()} placeholder="输入用户名或账号查找用户"/><button onClick={()=>void searchUsers()}>查找</button></div><div className="conversation-list">{[...userResults,...conversations.filter(c=>!userResults.some(u=>u.account===c.account))].map(person=><button key={person.account} onClick={()=>void openChat(person)}><span className="chat-avatar">{person.avatarUrl?<img src={person.avatarUrl} alt=""/>:person.avatar}</span><span><b>{person.displayName}</b><small>{person.account}</small>{person.content&&<em>{person.content}</em>}</span>{!!person.unreadCount&&<i>{person.unreadCount}</i>}</button>)}</div></>:<><button className="chat-back" onClick={()=>setChatTarget(null)}>← 返回会话</button><div className="chat-with"><b>{chatTarget.displayName}</b><small>{chatTarget.account}</small></div><div className="chat-messages">{chatMessages.map(item=><div key={item.id} className={item.senderEmail===user?.email?"mine":"theirs"}><span>{item.content}</span><small>{new Date(item.createdAt).toLocaleString("zh-CN")}</small></div>)}</div><div className="chat-compose"><textarea value={chatDraft} maxLength={1000} onChange={e=>setChatDraft(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();void sendChat()}}} placeholder="输入私信，Enter 发送"/><button onClick={()=>void sendChat()}>发送</button></div></>}
+              {!chatTarget?<><div className="user-search"><input value={userSearch} onChange={e=>setUserSearch(e.target.value)} onKeyDown={e=>e.key==="Enter"&&void searchUsers()} placeholder="输入用户名或账号查找用户"/><button onClick={()=>void searchUsers()}>查找</button></div>{userResults.length>0&&<><h3 className="conversation-heading">查找结果 · 点击查看用户卡片</h3><div className="conversation-list search-results">{userResults.map(person=><button key={person.account} onClick={()=>{setShowMessages(false);void openCreator(person.displayName)}}><span className="chat-avatar">{person.avatarUrl?<img src={person.avatarUrl} alt=""/>:person.avatar}</span><span><b>{person.displayName}</b><small>{person.account}</small></span><em>查看资料</em></button>)}</div></>}<h3 className="conversation-heading">最近私信</h3><div className="conversation-list">{conversations.map(person=><button key={person.account} onClick={()=>void openChat(person)}><span className="chat-avatar">{person.avatarUrl?<img src={person.avatarUrl} alt=""/>:person.avatar}</span><span><b>{person.displayName}</b><small>{person.account}</small>{person.content&&<em>{person.content}</em>}</span>{!!person.unreadCount&&<i>{person.unreadCount}</i>}</button>)}</div></>:<><button className="chat-back" onClick={()=>setChatTarget(null)}>← 返回会话</button><div className="chat-with"><b>{chatTarget.displayName}</b><small>{chatTarget.account}</small></div><div className="chat-messages">{chatMessages.map(item=><div key={item.id} className={item.senderEmail===user?.email?"mine":"theirs"}><span>{item.content}</span><small>{new Date(item.createdAt).toLocaleString("zh-CN")}</small></div>)}</div><div className="chat-compose"><textarea value={chatDraft} maxLength={1000} onChange={e=>setChatDraft(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();void sendChat()}}} placeholder="输入私信，Enter 发送"/><button onClick={()=>void sendChat()}>发送</button></div></>}
             </div>}
           </aside>
         </div>

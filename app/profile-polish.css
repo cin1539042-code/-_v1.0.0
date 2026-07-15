@@ -1,3 +1,4 @@
+.conversation-heading{margin:18px 2px 8px;color:#756d65;font-size:12px}.search-results>button>em{color:#246b4a;font-size:11px;font-style:normal;font-weight:800}
 .profile-page .profile-hero {
   display: grid;
   grid-template-columns: 360px minmax(420px, 1fr);
