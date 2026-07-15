@@ -1680,6 +1680,12 @@ await MoyuSDK.remove("progress");`}</pre></article>
               {notifications.length ? notifications.map((item) => (
                 <button key={item.id} className="message-card" onClick={() => {
                   if(item.kind==="direct-message"&&item.account){void openChat({account:item.account,displayName:item.actorName||item.account,avatar:"🐟"});return}
+                  if(item.kind==="announcement"){
+                    const announcementId=Number(String(item.id).split(":").pop())||announcement?.id||Date.now();
+                    setAnnouncementPopup({id:announcementId,content:item.detail});
+                    setShowMessages(false);
+                    return;
+                  }
                   if (item.workId) {
                     const work = works.find((candidate) => candidate.id === item.workId);
                     if (work) void openWork(work);
