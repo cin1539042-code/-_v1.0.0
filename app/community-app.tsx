@@ -29,6 +29,7 @@ type Work = {
   updateNotes?: string;
 };
 type Profile = {
+  account?: string;
   displayName: string;
   bio: string;
   avatar: string;
@@ -221,7 +222,7 @@ export default function CommunityApp({ user }: { user: User }) {
   const [notifications, setNotifications] = useState<NotificationMessage[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showMessages, setShowMessages] = useState(false);
-  const [messageTab,setMessageTab]=useState<"notices"|"chats">("notices");
+  const [messageTab,setMessageTab]=useState<"notices"|"chats"|"users">("notices");
   const [userSearch,setUserSearch]=useState("");
   const [userResults,setUserResults]=useState<ChatUser[]>([]);
   const [conversations,setConversations]=useState<ChatUser[]>([]);
@@ -241,6 +242,7 @@ export default function CommunityApp({ user }: { user: User }) {
   const [feedbackItems,setFeedbackItems]=useState<any[]>([]);
   const [feedbackDraft,setFeedbackDraft]=useState("");
   const [settings,setSettings]=useState({theme:"system",showFish:true,motion:true,notifications:true});
+  const [profileWorkFilter,setProfileWorkFilter]=useState<"created"|"favorites">("created");
   const [moyuSeconds, setMoyuSeconds] = useState(0);
   const moyuTime = [
     Math.floor(moyuSeconds / 3600),
@@ -329,6 +331,7 @@ export default function CommunityApp({ user }: { user: User }) {
     return () => window.clearInterval(timer);
   }, [user,settings.notifications]);
   useEffect(()=>{if(!chatTarget)return;const timer=window.setInterval(()=>void refreshChat(chatTarget),2500);return()=>window.clearInterval(timer)},[chatTarget?.account]);
+  useEffect(()=>{if(!showMessages){setUserSearch("");setUserResults([]);setChatTarget(null)}},[showMessages]);
   useEffect(()=>{if(!user)return;void retryOutbox();const online=()=>void retryOutbox();window.addEventListener("online",online);const timer=window.setInterval(()=>void retryOutbox(),15000);return()=>{window.removeEventListener("online",online);window.clearInterval(timer)}},[user]);
   useEffect(() => {
     let day = beijingDay();
@@ -649,8 +652,6 @@ export default function CommunityApp({ user }: { user: User }) {
         ["个人主页", "个人资料"],
         ["我的作品", "我的作品"],
         ["我的收藏", "我的收藏"],
-        ["我的关注", "我的关注"],
-        ["我的粉丝", "我的粉丝"],
       ].map(([key, label]) => (
         <button
           key={key}
@@ -827,10 +828,12 @@ export default function CommunityApp({ user }: { user: User }) {
         </div>
         {user ? (
           <>
+          <div className="topbar-tools">
           <button className="message-entry" onClick={() => void openMessages()} title="消息中心" aria-label="打开消息中心">
             <span>✉</span>{unreadCount > 0 && <i>{unreadCount > 9 ? "9+" : unreadCount}</i>}
           </button>
           <button className={`settings-entry ${tab==="设置"?"active":""}`} onClick={()=>changeTab("设置")} title="设置" aria-label="打开设置">⚙</button>
+          </div>
           <button className={`profile-entry ${["个人主页", "我的作品", "我的收藏", "我的关注", "我的粉丝"].includes(tab) ? "active" : ""}`} onClick={() => changeTab("个人主页")} title="打开个人主页">
             <span className="profile">
               {avatarPreview || profile.avatarUrl ? (
@@ -1627,10 +1630,9 @@ await MoyuSDK.remove("progress");`}</pre></article>
                   {message && <div className="toast">{message}</div>}
                 </div>
               </div>
-              <h2 className="profile-title">我的公开作品</h2>
+              <div className="profile-work-head"><h2 className="profile-title">我的作品与收藏</h2><div><button className={profileWorkFilter==="created"?"active":""} onClick={()=>setProfileWorkFilter("created")}>我的作品</button><button className={profileWorkFilter==="favorites"?"active":""} onClick={()=>{setProfileWorkFilter("favorites");void loadFavorites()}}>我的收藏</button></div></div>
               <div className="cards compact">
-                {mine
-                  .filter((w) => w.status === "published")
+                {(profileWorkFilter==="created"?mine.filter((w) => w.status === "published"):favoriteWorks)
                   .map((w, i) => (
                     <article
                       className={`card ${["peach", "blue", "cream"][i % 3]}`}
@@ -1673,7 +1675,7 @@ await MoyuSDK.remove("progress");`}</pre></article>
         <div className="message-drawer-backdrop" onClick={() => setShowMessages(false)}>
           <aside className="message-drawer" onClick={(event) => event.stopPropagation()} aria-label="消息中心">
             <header><div><span className="eyebrow">NOTIFICATIONS</span><h2>消息中心</h2></div><button onClick={() => setShowMessages(false)} aria-label="关闭">×</button></header>
-            <div className="message-tabs"><button className={messageTab==="notices"?"active":""} onClick={()=>setMessageTab("notices")}>动态提醒</button><button className={messageTab==="chats"?"active":""} onClick={()=>setMessageTab("chats")}>私信</button></div>
+            <div className="message-tabs"><button className={messageTab==="notices"?"active":""} onClick={()=>setMessageTab("notices")}>动态提醒</button><button className={messageTab==="chats"?"active":""} onClick={()=>{setMessageTab("chats");setUserSearch("");setUserResults([]);void loadFollows();void loadFollowers()}}>私信</button><button className={messageTab==="users"?"active":""} onClick={()=>{setMessageTab("users");setChatTarget(null)}}>找用户</button></div>
             {messageTab==="notices"?<div className="message-list">
               {notifications.length ? notifications.map((item) => (
                 <button key={item.id} className="message-card" onClick={() => {
@@ -1688,7 +1690,8 @@ await MoyuSDK.remove("progress");`}</pre></article>
                   <span><b>{item.title}</b><small>{item.detail}</small><time>{formatDate(item.createdAt)}</time></span>
                 </button>
               )) : <div className="message-empty"><span>🐟</span><b>暂时没有新消息</b><small>有新动态时，小鱼会来提醒你</small></div>}
-            </div>:<div className="chat-panel">
+            </div>:messageTab==="users"?<div className="user-directory"><div className="user-search"><input value={userSearch} onChange={e=>setUserSearch(e.target.value)} onKeyDown={e=>e.key==="Enter"&&void searchUsers()} placeholder="输入用户名或账号查找用户"/><button onClick={()=>void searchUsers()}>查找</button></div>{userResults.length>0?<div className="conversation-list search-results">{userResults.map(person=><button key={person.account} onClick={()=>{setShowMessages(false);void openCreator(person.displayName)}}><span className="chat-avatar">{person.avatarUrl?<img src={person.avatarUrl} alt=""/>:person.avatar}</span><span><b>{person.displayName}</b><small>{person.account}</small></span><em>查看资料</em></button>)}</div>:<div className="message-empty"><span>⌕</span><b>查找摸鱼搭子</b><small>输入用户名或账号开始查找</small></div>}</div>:<div className="chat-panel">
+              {!chatTarget&&<div className="social-directory"><section><h3>我的关注</h3>{followedCreators.map(person=><button key={person.displayName} onClick={()=>person.account?void openChat({account:person.account,displayName:person.displayName,avatar:person.avatar,avatarUrl:person.avatarUrl}):void openCreator(person.displayName)}><span className="chat-avatar">{person.avatarUrl?<img src={person.avatarUrl} alt=""/>:person.avatar}</span><b>{person.displayName}</b></button>)}</section><section><h3>我的粉丝</h3>{followers.map(person=><button key={person.account} onClick={()=>void openChat(person)}><span className="chat-avatar">{person.avatarUrl?<img src={person.avatarUrl} alt=""/>:person.avatar}</span><b>{person.displayName}</b></button>)}</section></div>}
               {chatTarget&&<button className="chat-peer-card" onClick={()=>{setShowMessages(false);void openCreator(chatTarget.displayName)}}><span className="chat-avatar">{chatTarget.avatarUrl?<img src={chatTarget.avatarUrl} alt="头像"/>:chatTarget.avatar}</span><span><b>{chatTarget.displayName}</b><small>{chatTarget.account}</small></span><em>查看资料</em></button>}
               {!chatTarget?<><div className="user-search"><input value={userSearch} onChange={e=>setUserSearch(e.target.value)} onKeyDown={e=>e.key==="Enter"&&void searchUsers()} placeholder="输入用户名或账号查找用户"/><button onClick={()=>void searchUsers()}>查找</button></div>{userResults.length>0&&<><h3 className="conversation-heading">查找结果 · 点击查看用户卡片</h3><div className="conversation-list search-results">{userResults.map(person=><button key={person.account} onClick={()=>{setShowMessages(false);void openCreator(person.displayName)}}><span className="chat-avatar">{person.avatarUrl?<img src={person.avatarUrl} alt=""/>:person.avatar}</span><span><b>{person.displayName}</b><small>{person.account}</small></span><em>查看资料</em></button>)}</div></>}<h3 className="conversation-heading">最近私信</h3><div className="conversation-list">{conversations.map(person=><button key={person.account} onClick={()=>void openChat(person)}><span className="chat-avatar">{person.avatarUrl?<img src={person.avatarUrl} alt=""/>:person.avatar}</span><span><b>{person.displayName}</b><small>{person.account}</small>{person.content&&<em>{person.content}</em>}</span>{!!person.unreadCount&&<i>{person.unreadCount}</i>}</button>)}</div></>:<><button className="chat-back" onClick={()=>setChatTarget(null)}>← 返回会话</button><div className="chat-with"><b>{chatTarget.displayName}</b><small>{chatTarget.account}</small></div><div className="chat-messages">{chatMessages.map(item=><div key={item.id} className={item.senderEmail===user?.email?"mine":"theirs"}><span>{item.content}</span><small>{new Date(item.createdAt).toLocaleString("zh-CN")}</small></div>)}</div><div className="chat-compose"><textarea value={chatDraft} maxLength={1000} onChange={e=>setChatDraft(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();void sendChat()}}} placeholder="输入私信，Enter 发送"/><button onClick={()=>void sendChat()}>发送</button></div></>}
             </div>}
@@ -1851,7 +1854,6 @@ await MoyuSDK.remove("progress");`}</pre>
           <div
             className={`overlay app-overlay ${minimized ? "window-hidden" : ""}`}
             style={minimized ? { display: "none" } : undefined}
-            onMouseDown={(e) => e.target === e.currentTarget && setViewer(null)}
           >
             <section
               className={`modal app-modal mode-${viewerMode}`}
