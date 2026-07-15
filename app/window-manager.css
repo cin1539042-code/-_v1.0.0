@@ -21,6 +21,8 @@
     max-height 0.25s;
   border: 2px solid #555;
 }
+.modal.app-modal{padding:0;border-width:1px}
+.app-toolbar .traffic-lights{flex:0 0 auto;margin-right:13px}.app-toolbar .traffic-lights i{display:block;width:13px;height:13px;border-radius:50%;background:#ff625d}.app-toolbar .traffic-lights i:nth-child(2){background:#ffc043}.app-toolbar .traffic-lights i:nth-child(3){background:#37c958}
 .app-modal.mode-desktop {
   width: min(1200px, 96vw);
   height: min(800px, 95vh);

@@ -1873,6 +1873,7 @@ await MoyuSDK.remove("progress");`}</pre>
               }
             >
               <div className="app-toolbar">
+                <div className="traffic-lights" aria-hidden="true"><i /><i /><i /></div>
                 <div className="app-identity">
                   <b>{viewer.title}</b>
                 </div>
