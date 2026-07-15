@@ -71,3 +71,5 @@ export const directMessages = sqliteTable("direct_messages", {
   readAt: text("read_at"),
   clientNonce: text("client_nonce"),
 });
+export const announcements=sqliteTable("announcements",{id:integer("id").primaryKey({autoIncrement:true}),content:text("content").notNull(),active:integer("active").notNull().default(1),createdBy:text("created_by").notNull(),createdAt:text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`)});
+export const siteSettings=sqliteTable("site_settings",{key:text("key").primaryKey(),value:text("value").notNull(),updatedAt:text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)});

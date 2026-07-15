@@ -195,6 +195,8 @@ export default function CommunityApp({ user }: { user: User }) {
   const appFrameRef = useRef<HTMLIFrameElement>(null);
   const brandClickCount = useRef(0);
   const brandClickTimer = useRef<number | null>(null);
+  const versionClickCount=useRef(0);
+  const versionClickTimer=useRef<number|null>(null);
   const activityRef=useRef({fishCount:0,fishSeconds:0});
   const [category, setCategory] = useState("全部");
   const [showLogin, setShowLogin] = useState(!user);
@@ -227,6 +229,12 @@ export default function CommunityApp({ user }: { user: User }) {
   const [chatMessages,setChatMessages]=useState<any[]>([]);
   const [chatDraft,setChatDraft]=useState("");
   const [releaseNotes,setReleaseNotes]=useState<Work|null>(null);
+  const [showAdminLogin,setShowAdminLogin]=useState(false);
+  const [adminPassword,setAdminPassword]=useState("");
+  const [adminData,setAdminData]=useState<any>(null);
+  const [announcement,setAnnouncement]=useState<any>(null);
+  const [announcementDraft,setAnnouncementDraft]=useState("");
+  const [adminVersion,setAdminVersion]=useState("v37");
   const [moyuSeconds, setMoyuSeconds] = useState(0);
   const moyuTime = [
     Math.floor(moyuSeconds / 3600),
@@ -300,6 +308,7 @@ export default function CommunityApp({ user }: { user: User }) {
   },[user]);
   useEffect(() => {
     void loadWorks();
+    void fetch("/api/announcement",{cache:"no-store"}).then(r=>r.json()).then(d=>setAnnouncement(d.announcement||null)).catch(()=>{});
     if (user) {
       void loadProfile();
       void loadMine();
@@ -617,6 +626,10 @@ export default function CommunityApp({ user }: { user: User }) {
     } catch { setRevealedVersion("读取失败"); }
     window.setTimeout(() => setRevealedVersion(""), 5000);
   };
+  const handleVersionClick=()=>{versionClickCount.current+=1;if(versionClickTimer.current)window.clearTimeout(versionClickTimer.current);versionClickTimer.current=window.setTimeout(()=>versionClickCount.current=0,1400);if(versionClickCount.current>=3){versionClickCount.current=0;setShowAdminLogin(true)}};
+  const loadAdmin=async()=>{const r=await fetch("/api/admin",{cache:"no-store"});const d=await readApiResponse(r);if(r.ok){setAdminData(d);setAnnouncementDraft(d.announcement?.content||"");setAdminVersion(d.version||"v37");setTab("管理后台")}else setMessage(d.error||"无法进入管理后台")};
+  const loginAdmin=async()=>{if(!user)return;const r=await fetch("/api/admin/auth",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({account:user.email,password:adminPassword})});const d=await readApiResponse(r);if(!r.ok){setMessage(d.error||"验证失败");return}setShowAdminLogin(false);setAdminPassword("");await loadAdmin()};
+  const adminAction=async(action:"announcement"|"version")=>{const payload=action==="announcement"?{action,content:announcementDraft}:{action,version:adminVersion};const r=await fetch("/api/admin",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});const d=await readApiResponse(r);setMessage(r.ok?(action==="announcement"?"公告已发布":"页面版本已更新"):d.error||"操作失败");if(r.ok){if(action==="announcement")setAnnouncement(announcementDraft?{content:announcementDraft}:null);await loadAdmin()}};
   const accountNav = (
     <div className="profile-hub-nav" aria-label="个人中心功能">
       {[
@@ -777,7 +790,7 @@ export default function CommunityApp({ user }: { user: User }) {
           <span className="fish">🐟</span>
           <span>摸鱼箱</span>
         </button>
-        {revealedVersion&&<div className="hidden-version" role="status">当前版本：{revealedVersion}</div>}
+        {revealedVersion&&<button className="hidden-version" role="status" onClick={handleVersionClick}>当前版本：{revealedVersion}</button>}
         <nav>
           {["发现功能", "创作中心"].map((x) => (
             <button
@@ -825,6 +838,7 @@ export default function CommunityApp({ user }: { user: User }) {
           </button>
         )}
       </header>
+      {announcement&&<div className="site-announcement"><span>公告</span><p>{announcement.content}</p><button onClick={()=>setAnnouncement(null)} aria-label="关闭公告">×</button></div>}
       <div className="moyu-background" aria-hidden="true">
         <div className="wall-clock">
           <i
@@ -1632,6 +1646,10 @@ await MoyuSDK.remove("progress");`}</pre></article>
           )}
         </section>
       )}
+
+      {tab==="管理后台"&&adminData&&<section className="workspace admin-console"><div className="admin-head"><div><span className="eyebrow">ADMIN CONSOLE</span><h1>摸鱼箱管理后台</h1><p>管理员：{adminData.admin}</p></div><button className="secondary" onClick={async()=>{await fetch("/api/admin/auth",{method:"DELETE"});setAdminData(null);changeTab("发现功能")}}>退出管理</button></div><div className="admin-stats">{[["注册用户",adminData.stats.users],["全部作品",adminData.stats.works],["已发布作品",adminData.stats.published],["作品打开次数",adminData.stats.plays],["私信总数",adminData.stats.messages],["收藏关系",adminData.stats.favorites],["关注关系",adminData.stats.follows]].map(([label,value])=><article key={String(label)}><small>{label}</small><b>{value}</b></article>)}</div><div className="admin-panels"><article><span className="eyebrow">ANNOUNCEMENT</span><h2>发布全站公告</h2><p>发布新公告会自动替换上一条；留空保存可撤下公告。</p><textarea value={announcementDraft} maxLength={500} onChange={e=>setAnnouncementDraft(e.target.value)} placeholder="输入需要向所有用户展示的公告…"/><button className="primary" onClick={()=>void adminAction("announcement")}>{announcementDraft?"发布公告":"撤下公告"}</button></article><article><span className="eyebrow">VERSION</span><h2>更新页面版本</h2><p>版本号将用于隐藏入口展示和页面更新检测。</p><input value={adminVersion} onChange={e=>setAdminVersion(e.target.value)} placeholder="v37"/><button className="primary" onClick={()=>void adminAction("version")}>更新版本号</button></article></div>{message&&<div className="toast">{message}</div>}</section>}
+
+      {showAdminLogin&&<div className="overlay" onMouseDown={e=>e.target===e.currentTarget&&setShowAdminLogin(false)}><section className="modal admin-login"><button className="close" onClick={()=>setShowAdminLogin(false)}>×</button><span className="eyebrow">ADMIN ACCESS</span><h2>管理员验证</h2><p>请输入当前账号和管理员密码。</p><label>账号<input value={user?.email||""} disabled/></label><label>密码<input type="password" value={adminPassword} onChange={e=>setAdminPassword(e.target.value)} onKeyDown={e=>e.key==="Enter"&&void loginAdmin()} autoFocus/></label>{message&&<div className="toast">{message}</div>}<button className="primary" onClick={()=>void loginAdmin()}>进入管理后台</button></section></div>}
 
       {showMessages && (
         <div className="message-drawer-backdrop" onClick={() => setShowMessages(false)}>
