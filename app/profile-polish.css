@@ -1,4 +1,4 @@
-.conversation-heading{margin:18px 2px 8px;color:#756d65;font-size:12px}.search-results>button>em{color:#246b4a;font-size:11px;font-style:normal;font-weight:800}
+.conversation-heading{margin:18px 2px 8px;color:#756d65;font-size:12px}.search-results>button>em{color:#246b4a;font-size:11px;font-style:normal;font-weight:800}.chat-peer-card{width:100%;display:grid;grid-template-columns:48px 1fr auto;align-items:center;gap:11px;margin-top:14px;padding:11px;border:2px solid #25223b;border-radius:14px;background:#fffaf2;text-align:left}.chat-peer-card b,.chat-peer-card small{display:block}.chat-peer-card small{margin-top:3px;color:#817a72}.chat-peer-card em{font-size:11px;font-style:normal;font-weight:800;color:#246b4a}.chat-panel>.chat-with{display:none}
 .profile-page .profile-hero {
   display: grid;
   grid-template-columns: 360px minmax(420px, 1fr);

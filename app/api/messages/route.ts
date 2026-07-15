@@ -21,11 +21,13 @@ export async function GET(request: Request) {
 }
 export async function POST(request: Request) {
   const user = await getChatGPTUser(); if (!user) return Response.json({ error: "请先登录" }, { status: 401 });
-  await ensureMessageSchema(); const body=await request.json() as {account?:string;content?:string};
-  const account=String(body.account||"").trim(),content=String(body.content||"").trim().slice(0,1000);
+  await ensureMessageSchema(); const body=await request.json() as {account?:string;content?:string;clientNonce?:string};
+  const account=String(body.account||"").trim(),content=String(body.content||"").trim().slice(0,1000),clientNonce=String(body.clientNonce||crypto.randomUUID()).slice(0,80);
   if(!account||!content)return Response.json({error:"请输入消息内容"},{status:400});
   if(account===user.email)return Response.json({error:"不能给自己发私信"},{status:400});
   const target=await env.DB.prepare("SELECT email FROM profiles WHERE email=?").bind(account).first();if(!target)return Response.json({error:"用户不存在"},{status:404});
-  const result=await env.DB.prepare("INSERT INTO direct_messages(sender_email,recipient_email,content,created_at) VALUES(?,?,?,?)").bind(user.email,account,content,new Date().toISOString()).run();
+  const existing=await env.DB.prepare("SELECT id FROM direct_messages WHERE sender_email=? AND client_nonce=?").bind(user.email,clientNonce).first<any>();
+  if(existing)return Response.json({ok:true,id:existing.id,deduplicated:true});
+  const result=await env.DB.prepare("INSERT INTO direct_messages(sender_email,recipient_email,content,created_at,client_nonce) VALUES(?,?,?,?,?)").bind(user.email,account,content,new Date().toISOString(),clientNonce).run();
   return Response.json({ok:true,id:result.meta.last_row_id});
 }

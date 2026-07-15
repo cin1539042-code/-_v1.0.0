@@ -69,4 +69,5 @@ export const directMessages = sqliteTable("direct_messages", {
   content: text("content").notNull(),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   readAt: text("read_at"),
+  clientNonce: text("client_nonce"),
 });

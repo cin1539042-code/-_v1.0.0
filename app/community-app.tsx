@@ -160,6 +160,7 @@ export default function CommunityApp({ user }: { user: User }) {
   const [mine, setMine] = useState<Work[]>([]);
   const [favoriteWorks, setFavoriteWorks] = useState<Work[]>([]);
   const [followedCreators, setFollowedCreators] = useState<Profile[]>([]);
+  const [followers,setFollowers]=useState<ChatUser[]>([]);
   const [viewer, setViewer] = useState<Work | null>(null);
   const [minimizedApps,setMinimizedApps]=useState<Work[]>([]);
   const [creator, setCreator] = useState<{
@@ -267,6 +268,7 @@ export default function CommunityApp({ user }: { user: User }) {
     const d = await r.json();
     if (r.ok) setFollowedCreators(d.creators);
   };
+  const loadFollowers=async()=>{if(!user)return;const r=await fetch("/api/follows?mode=followers");const d=await readApiResponse(r);if(r.ok)setFollowers(d.creators||[])};
   const loadNotifications = async () => {
     if (!user) return;
     const r = await fetch("/api/notifications", { cache: "no-store" });
@@ -287,7 +289,9 @@ export default function CommunityApp({ user }: { user: User }) {
   const searchUsers=async()=>{if(userSearch.trim().length<2){setUserResults([]);return}const r=await fetch(`/api/users?q=${encodeURIComponent(userSearch.trim())}`);const d=await readApiResponse(r);if(r.ok)setUserResults(d.users||[])};
   const refreshChat=async(target:ChatUser,foreground=false)=>{const r=await fetch(`/api/messages?account=${encodeURIComponent(target.account)}`,{cache:"no-store"});const d=await readApiResponse(r);if(r.ok){if(foreground){setChatTarget(d.user);void loadNotifications();void loadConversations()}setChatMessages(d.messages||[])}};
   const openChat=async(target:ChatUser)=>{setChatTarget(target);setMessageTab("chats");await refreshChat(target,true)};
-  const sendChat=async()=>{if(!chatTarget||!chatDraft.trim())return;const content=chatDraft.trim(),target=chatTarget,tempId=`temp-${Date.now()}`;setChatDraft("");setChatMessages(list=>[...list,{id:tempId,senderEmail:user?.email,recipientEmail:target.account,content,createdAt:new Date().toISOString()}]);const r=await fetch("/api/messages",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({account:target.account,content})});if(r.ok)void refreshChat(target);else{setChatMessages(list=>list.filter(item=>item.id!==tempId));const d=await readApiResponse(r);setMessage(d.error||"发送失败")}};
+  const deliverQueuedMessage=async(item:{account:string;content:string;clientNonce:string})=>{try{const r=await fetch("/api/messages",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(item)});if(!r.ok)return false;const queue=JSON.parse(localStorage.getItem("moyu:message-outbox")||"[]").filter((x:any)=>x.clientNonce!==item.clientNonce);localStorage.setItem("moyu:message-outbox",JSON.stringify(queue));return true}catch{return false}};
+  const retryOutbox=async()=>{const queue=JSON.parse(localStorage.getItem("moyu:message-outbox")||"[]") as {account:string;content:string;clientNonce:string}[];for(const item of queue)await deliverQueuedMessage(item);if(chatTarget)void refreshChat(chatTarget)};
+  const sendChat=async()=>{if(!chatTarget||!chatDraft.trim())return;const content=chatDraft.trim(),target=chatTarget,clientNonce=crypto.randomUUID(),tempId=`temp-${clientNonce}`,item={account:target.account,content,clientNonce};setChatDraft("");setChatMessages(list=>[...list,{id:tempId,senderEmail:user?.email,recipientEmail:target.account,content,createdAt:new Date().toISOString(),pending:true}]);const queue=JSON.parse(localStorage.getItem("moyu:message-outbox")||"[]");localStorage.setItem("moyu:message-outbox",JSON.stringify([...queue,item]));const delivered=await deliverQueuedMessage(item);if(delivered)void refreshChat(target);else setMessage("网络不稳定，私信已安全保存在待发队列，联网后会自动重试")};
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
     if(!user)return;
@@ -308,6 +312,7 @@ export default function CommunityApp({ user }: { user: User }) {
     return () => window.clearInterval(timer);
   }, [user]);
   useEffect(()=>{if(!chatTarget)return;const timer=window.setInterval(()=>void refreshChat(chatTarget),2500);return()=>window.clearInterval(timer)},[chatTarget?.account]);
+  useEffect(()=>{if(!user)return;void retryOutbox();const online=()=>void retryOutbox();window.addEventListener("online",online);const timer=window.setInterval(()=>void retryOutbox(),15000);return()=>{window.removeEventListener("online",online);window.clearInterval(timer)}},[user]);
   useEffect(() => {
     let day = beijingDay();
     setMoyuSeconds(Number(localStorage.getItem(`moyu-seconds:${day}`) || 0));
@@ -583,6 +588,7 @@ export default function CommunityApp({ user }: { user: User }) {
     if (next === "我的作品") void loadMine();
     if (next === "我的收藏") void loadFavorites();
     if (next === "我的关注") void loadFollows();
+    if (next === "我的粉丝") void loadFollowers();
     if (next === "个人主页") {
       void loadProfile();
       void loadMine();
@@ -618,6 +624,7 @@ export default function CommunityApp({ user }: { user: User }) {
         ["我的作品", "我的作品"],
         ["我的收藏", "我的收藏"],
         ["我的关注", "我的关注"],
+        ["我的粉丝", "我的粉丝"],
       ].map(([key, label]) => (
         <button
           key={key}
@@ -797,7 +804,7 @@ export default function CommunityApp({ user }: { user: User }) {
           <button className="message-entry" onClick={() => void openMessages()} title="消息中心" aria-label="打开消息中心">
             <span>✉</span>{unreadCount > 0 && <i>{unreadCount > 9 ? "9+" : unreadCount}</i>}
           </button>
-          <button className={`profile-entry ${["个人主页", "我的作品", "我的收藏", "我的关注"].includes(tab) ? "active" : ""}`} onClick={() => changeTab("个人主页")} title="打开个人主页">
+          <button className={`profile-entry ${["个人主页", "我的作品", "我的收藏", "我的关注", "我的粉丝"].includes(tab) ? "active" : ""}`} onClick={() => changeTab("个人主页")} title="打开个人主页">
             <span className="profile">
               {avatarPreview || profile.avatarUrl ? (
                 <img src={avatarPreview || profile.avatarUrl || ""} alt="头像" />
@@ -1522,6 +1529,8 @@ await MoyuSDK.remove("progress");`}</pre></article>
         </section>
       )}
 
+      {tab === "我的粉丝"&&<section className="workspace profile-page">{accountNav}<span className="eyebrow">FOLLOWERS</span><h1>我的粉丝</h1>{followers.length===0?<div className="empty">暂时还没有粉丝。</div>:<div className="following-grid">{followers.map(person=><article key={person.account}><button className="following-avatar" onClick={()=>void openCreator(person.displayName)}>{person.avatarUrl?<img src={person.avatarUrl} alt="头像"/>:<span>{person.avatar}</span>}</button><div><h3>{person.displayName}</h3><p>{person.bio||person.account}</p><small>{person.account}</small></div><button className="secondary" onClick={()=>void openCreator(person.displayName)}>查看资料</button></article>)}</div>}</section>}
+
       {tab === "个人主页" && (
         <section className="workspace profile-page">
           {accountNav}
@@ -1644,6 +1653,7 @@ await MoyuSDK.remove("progress");`}</pre></article>
                 </button>
               )) : <div className="message-empty"><span>🐟</span><b>暂时没有新消息</b><small>有新动态时，小鱼会来提醒你</small></div>}
             </div>:<div className="chat-panel">
+              {chatTarget&&<button className="chat-peer-card" onClick={()=>{setShowMessages(false);void openCreator(chatTarget.displayName)}}><span className="chat-avatar">{chatTarget.avatarUrl?<img src={chatTarget.avatarUrl} alt="头像"/>:chatTarget.avatar}</span><span><b>{chatTarget.displayName}</b><small>{chatTarget.account}</small></span><em>查看资料</em></button>}
               {!chatTarget?<><div className="user-search"><input value={userSearch} onChange={e=>setUserSearch(e.target.value)} onKeyDown={e=>e.key==="Enter"&&void searchUsers()} placeholder="输入用户名或账号查找用户"/><button onClick={()=>void searchUsers()}>查找</button></div>{userResults.length>0&&<><h3 className="conversation-heading">查找结果 · 点击查看用户卡片</h3><div className="conversation-list search-results">{userResults.map(person=><button key={person.account} onClick={()=>{setShowMessages(false);void openCreator(person.displayName)}}><span className="chat-avatar">{person.avatarUrl?<img src={person.avatarUrl} alt=""/>:person.avatar}</span><span><b>{person.displayName}</b><small>{person.account}</small></span><em>查看资料</em></button>)}</div></>}<h3 className="conversation-heading">最近私信</h3><div className="conversation-list">{conversations.map(person=><button key={person.account} onClick={()=>void openChat(person)}><span className="chat-avatar">{person.avatarUrl?<img src={person.avatarUrl} alt=""/>:person.avatar}</span><span><b>{person.displayName}</b><small>{person.account}</small>{person.content&&<em>{person.content}</em>}</span>{!!person.unreadCount&&<i>{person.unreadCount}</i>}</button>)}</div></>:<><button className="chat-back" onClick={()=>setChatTarget(null)}>← 返回会话</button><div className="chat-with"><b>{chatTarget.displayName}</b><small>{chatTarget.account}</small></div><div className="chat-messages">{chatMessages.map(item=><div key={item.id} className={item.senderEmail===user?.email?"mine":"theirs"}><span>{item.content}</span><small>{new Date(item.createdAt).toLocaleString("zh-CN")}</small></div>)}</div><div className="chat-compose"><textarea value={chatDraft} maxLength={1000} onChange={e=>setChatDraft(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();void sendChat()}}} placeholder="输入私信，Enter 发送"/><button onClick={()=>void sendChat()}>发送</button></div></>}
             </div>}
           </aside>
