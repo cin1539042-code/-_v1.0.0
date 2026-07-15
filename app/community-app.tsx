@@ -43,7 +43,7 @@ type Profile = {
 };
 type NotificationMessage = {
   id: string;
-  kind: "work-update" | "new-follower" | "direct-message";
+  kind: "work-update" | "new-follower" | "direct-message" | "announcement";
   title: string;
   detail: string;
   createdAt: string;
@@ -235,6 +235,11 @@ export default function CommunityApp({ user }: { user: User }) {
   const [announcement,setAnnouncement]=useState<any>(null);
   const [announcementDraft,setAnnouncementDraft]=useState("");
   const [adminVersion,setAdminVersion]=useState("v37");
+  const [announcementPopup,setAnnouncementPopup]=useState<any>(null);
+  const [adminResource,setAdminResource]=useState<"users"|"works"|"feedback"|null>(null);
+  const [adminRows,setAdminRows]=useState<any[]>([]);
+  const [feedbackItems,setFeedbackItems]=useState<any[]>([]);
+  const [feedbackDraft,setFeedbackDraft]=useState("");
   const [moyuSeconds, setMoyuSeconds] = useState(0);
   const moyuTime = [
     Math.floor(moyuSeconds / 3600),
@@ -308,7 +313,7 @@ export default function CommunityApp({ user }: { user: User }) {
   },[user]);
   useEffect(() => {
     void loadWorks();
-    void fetch("/api/announcement",{cache:"no-store"}).then(r=>r.json()).then(d=>setAnnouncement(d.announcement||null)).catch(()=>{});
+    void fetch("/api/announcement",{cache:"no-store"}).then(r=>r.json()).then(d=>{setAnnouncement(d.announcement||null);if(d.announcement&&!localStorage.getItem(`moyu:announcement-read:${d.announcement.id}`))window.setTimeout(()=>setAnnouncementPopup(d.announcement),3000)}).catch(()=>{});
     if (user) {
       void loadProfile();
       void loadMine();
@@ -598,6 +603,7 @@ export default function CommunityApp({ user }: { user: User }) {
     if (next === "我的收藏") void loadFavorites();
     if (next === "我的关注") void loadFollows();
     if (next === "我的粉丝") void loadFollowers();
+    if (next === "反馈信箱") void loadFeedback();
     if (next === "个人主页") {
       void loadProfile();
       void loadMine();
@@ -630,6 +636,10 @@ export default function CommunityApp({ user }: { user: User }) {
   const loadAdmin=async()=>{const r=await fetch("/api/admin",{cache:"no-store"});const d=await readApiResponse(r);if(r.ok){setAdminData(d);setAnnouncementDraft(d.announcement?.content||"");setAdminVersion(d.version||"v37");setTab("管理后台")}else setMessage(d.error||"无法进入管理后台")};
   const loginAdmin=async()=>{if(!user)return;const r=await fetch("/api/admin/auth",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({account:user.email,password:adminPassword})});const d=await readApiResponse(r);if(!r.ok){setMessage(d.error||"验证失败");return}setShowAdminLogin(false);setAdminPassword("");await loadAdmin()};
   const adminAction=async(action:"announcement"|"version")=>{const payload=action==="announcement"?{action,content:announcementDraft}:{action,version:adminVersion};const r=await fetch("/api/admin",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});const d=await readApiResponse(r);setMessage(r.ok?(action==="announcement"?"公告已发布":"页面版本已更新"):d.error||"操作失败");if(r.ok){if(action==="announcement")setAnnouncement(announcementDraft?{content:announcementDraft}:null);await loadAdmin()}};
+  const loadAdminResource=async(resource:"users"|"works"|"feedback")=>{const r=await fetch(`/api/admin?resource=${resource}`,{cache:"no-store"});const d=await readApiResponse(r);if(r.ok){setAdminResource(resource);setAdminRows(d.rows||[])}};
+  const moderate=async(payload:any)=>{const r=await fetch("/api/admin",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});const d=await readApiResponse(r);setMessage(r.ok?"管理操作已生效":d.error||"操作失败");if(r.ok&&adminResource)void loadAdminResource(adminResource)};
+  const loadFeedback=async()=>{const r=await fetch("/api/feedback",{cache:"no-store"});const d=await readApiResponse(r);if(r.ok)setFeedbackItems(d.feedback||[])};
+  const submitFeedback=async()=>{const r=await fetch("/api/feedback",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({content:feedbackDraft})});const d=await readApiResponse(r);setMessage(r.ok?"反馈已送达管理员信箱":d.error||"提交失败");if(r.ok){setFeedbackDraft("");void loadFeedback()}};
   const accountNav = (
     <div className="profile-hub-nav" aria-label="个人中心功能">
       {[
@@ -638,6 +648,7 @@ export default function CommunityApp({ user }: { user: User }) {
         ["我的收藏", "我的收藏"],
         ["我的关注", "我的关注"],
         ["我的粉丝", "我的粉丝"],
+        ["反馈信箱", "反馈信箱"],
       ].map(([key, label]) => (
         <button
           key={key}
@@ -838,7 +849,7 @@ export default function CommunityApp({ user }: { user: User }) {
           </button>
         )}
       </header>
-      {announcement&&<div className="site-announcement"><span>公告</span><p>{announcement.content}</p><button onClick={()=>setAnnouncement(null)} aria-label="关闭公告">×</button></div>}
+      {announcementPopup&&<aside className="announcement-popup" role="status"><span className="eyebrow">LATEST NOTICE</span><h3>摸鱼箱公告</h3><p>{announcementPopup.content}</p><button onClick={()=>{localStorage.setItem(`moyu:announcement-read:${announcementPopup.id}`,"1");setAnnouncementPopup(null)}}>我知道了</button></aside>}
       <div className="moyu-background" aria-hidden="true">
         <div className="wall-clock">
           <i
@@ -1650,6 +1661,10 @@ await MoyuSDK.remove("progress");`}</pre></article>
       {tab==="管理后台"&&adminData&&<section className="workspace admin-console"><div className="admin-head"><div><span className="eyebrow">ADMIN CONSOLE</span><h1>摸鱼箱管理后台</h1><p>管理员：{adminData.admin}</p></div><button className="secondary" onClick={async()=>{await fetch("/api/admin/auth",{method:"DELETE"});setAdminData(null);changeTab("发现功能")}}>退出管理</button></div><div className="admin-stats">{[["注册用户",adminData.stats.users],["全部作品",adminData.stats.works],["已发布作品",adminData.stats.published],["作品打开次数",adminData.stats.plays],["私信总数",adminData.stats.messages],["收藏关系",adminData.stats.favorites],["关注关系",adminData.stats.follows]].map(([label,value])=><article key={String(label)}><small>{label}</small><b>{value}</b></article>)}</div><div className="admin-panels"><article><span className="eyebrow">ANNOUNCEMENT</span><h2>发布全站公告</h2><p>发布新公告会自动替换上一条；留空保存可撤下公告。</p><textarea value={announcementDraft} maxLength={500} onChange={e=>setAnnouncementDraft(e.target.value)} placeholder="输入需要向所有用户展示的公告…"/><button className="primary" onClick={()=>void adminAction("announcement")}>{announcementDraft?"发布公告":"撤下公告"}</button></article><article><span className="eyebrow">VERSION</span><h2>更新页面版本</h2><p>版本号将用于隐藏入口展示和页面更新检测。</p><input value={adminVersion} onChange={e=>setAdminVersion(e.target.value)} placeholder="v37"/><button className="primary" onClick={()=>void adminAction("version")}>更新版本号</button></article></div>{message&&<div className="toast">{message}</div>}</section>}
 
       {showAdminLogin&&<div className="overlay" onMouseDown={e=>e.target===e.currentTarget&&setShowAdminLogin(false)}><section className="modal admin-login"><button className="close" onClick={()=>setShowAdminLogin(false)}>×</button><span className="eyebrow">ADMIN ACCESS</span><h2>管理员验证</h2><p>请输入当前账号和管理员密码。</p><label>账号<input value={user?.email||""} disabled/></label><label>密码<input type="password" value={adminPassword} onChange={e=>setAdminPassword(e.target.value)} onKeyDown={e=>e.key==="Enter"&&void loginAdmin()} autoFocus/></label>{message&&<div className="toast">{message}</div>}<button className="primary" onClick={()=>void loginAdmin()}>进入管理后台</button></section></div>}
+
+      {tab==="反馈信箱"&&<section className="workspace profile-page">{accountNav}<span className="eyebrow">FEEDBACK</span><h1>反馈信箱</h1><div className="feedback-compose"><h2>向管理员反馈</h2><p>建议、故障和使用问题都可以在这里提交。</p><textarea value={feedbackDraft} maxLength={1000} onChange={e=>setFeedbackDraft(e.target.value)} placeholder="请描述你遇到的问题或建议…"/><button className="primary" onClick={()=>void submitFeedback()}>发送反馈</button></div><div className="feedback-history">{feedbackItems.map(item=><article key={item.id}><header><b>反馈 #{item.id}</b><span className={`feedback-status ${item.status}`}>{item.status==="resolved"?"已解决":item.status==="processing"?"处理中":"待处理"}</span></header><p>{item.content}</p>{item.adminReply&&<blockquote><b>管理员回复</b>{item.adminReply}</blockquote>}<small>{new Date(item.createdAt).toLocaleString("zh-CN")}</small></article>)}</div>{message&&<div className="toast">{message}</div>}</section>}
+
+      {tab==="管理后台"&&adminData&&<section className="workspace admin-detail-console"><h2>数据与内容管理</h2><div className="admin-resource-tabs"><button onClick={()=>void loadAdminResource("users")}>注册用户 · 查看详情</button><button onClick={()=>void loadAdminResource("works")}>全部作品 · 查看详情</button><button onClick={()=>void loadAdminResource("feedback")}>反馈信箱 · {adminData.stats.feedback||0} 条待处理</button></div>{adminResource&&<div className="admin-data-list">{adminResource==="users"&&adminRows.map(row=><article key={row.email}><div><b>{row.displayName}</b><small>{row.email}</small><p>{row.workCount} 个作品 · {row.followerCount} 位粉丝 · 注册于 {formatDate(row.createdAt)}</p></div><button className={row.status==="suspended"?"primary":"secondary"} onClick={()=>void moderate({action:"user-status",email:row.email,status:row.status==="suspended"?"active":"suspended"})}>{row.status==="suspended"?"恢复账号":"停用账号"}</button></article>)}{adminResource==="works"&&adminRows.map(row=><article key={row.id}><div><b>#{row.id} {row.title}</b><small>{row.authorName} · {row.authorEmail}</small><p>{row.type} · 打开 {row.playCount} 次 · {row.status==="published"?"已发布":"已下架"}</p></div><button className={row.status==="published"?"secondary":"primary"} onClick={()=>void moderate({action:"work-status",id:row.id,status:row.status==="published"?"draft":"published"})}>{row.status==="published"?"下架作品":"恢复发布"}</button></article>)}{adminResource==="feedback"&&adminRows.map(row=><article key={row.id}><div><b>反馈 #{row.id} · {row.userEmail}</b><p>{row.content}</p>{row.adminReply&&<small>已回复：{row.adminReply}</small>}</div><div className="admin-row-actions"><button onClick={()=>{const reply=window.prompt("回复用户",row.adminReply||"");if(reply!==null)void moderate({action:"feedback-status",id:row.id,status:"resolved",reply})}}>回复并解决</button><button onClick={()=>void moderate({action:"feedback-status",id:row.id,status:"processing",reply:row.adminReply||""})}>标记处理中</button></div></article>)}</div>}</section>}
 
       {showMessages && (
         <div className="message-drawer-backdrop" onClick={() => setShowMessages(false)}>

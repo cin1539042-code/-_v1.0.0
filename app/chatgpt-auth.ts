@@ -20,6 +20,7 @@ export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
   const requestHeaders = await headers();
   const email = requestHeaders.get(USER_EMAIL_HEADER);
   if (!email) return null;
+  try { const {env}=await import("cloudflare:workers"); const row=await env.DB.prepare("SELECT status FROM user_moderation WHERE user_email=?").bind(email).first<{status:string}>(); if(row?.status==="suspended")return null; } catch {}
 
   const encodedFullName = requestHeaders.get(USER_FULL_NAME_HEADER);
   const fullName =
