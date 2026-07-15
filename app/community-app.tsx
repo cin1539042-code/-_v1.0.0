@@ -1873,55 +1873,13 @@ await MoyuSDK.remove("progress");`}</pre>
               }
             >
               <div className="app-toolbar">
-                <div className="traffic-lights">
-                  <button onClick={() => setViewer(null)} title="关闭" />
-                  <button onClick={minimizeViewer} title="最小化" />
-                  <button onClick={() => setViewerMode("full")} title="全屏" />
-                </div>
                 <div className="app-identity">
-                  <span>✦</span>
-                  <div>
-                    <b>{viewer.title}</b>
-                    <small>{viewer.authorName} · 本地存档已开启</small>
-                  </div>
-                </div>
-                <div className="window-sizes">
-                  <button
-                    className={viewerMode === "mobile" ? "active" : ""}
-                    onClick={() => setViewerMode("mobile")}
-                  >
-                    手机
-                  </button>
-                  <button
-                    className={viewerMode === "tablet" ? "active" : ""}
-                    onClick={() => setViewerMode("tablet")}
-                  >
-                    平板
-                  </button>
-                  <button
-                    className={viewerMode === "mini" ? "active" : ""}
-                    onClick={() => setViewerMode("mini")}
-                  >
-                    小窗
-                  </button>
-                  <button
-                    className={viewerMode === "desktop" ? "active" : ""}
-                    onClick={() => setViewerMode("desktop")}
-                  >
-                    桌面
-                  </button>
-                  <button
-                    className={viewerMode === "custom" ? "active" : ""}
-                    onClick={() => setViewerMode("custom")}
-                  >
-                    作者推荐
-                  </button>
-                  <button onClick={() => setViewerMode("full")}>全屏</button>
+                  <b>{viewer.title}</b>
                 </div>
                 <div className="app-toolbar-actions">
-                  <button onClick={clearViewerStorage}>清除存档</button>
-                  <button onClick={minimizeViewer}>—</button>
-                  <button onClick={() => setViewer(null)}>×</button>
+                  <button onClick={() => setViewerMode(viewerMode === "full" ? viewer.windowSize || "desktop" : "full")}>{viewerMode === "full" ? "退出全屏" : "全屏"}</button>
+                  <button onClick={minimizeViewer} title="最小化" aria-label="最小化">—</button>
+                  <button onClick={() => setViewer(null)} title="关闭" aria-label="关闭">×</button>
                 </div>
               </div>
               <iframe

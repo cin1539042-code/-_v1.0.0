@@ -43,6 +43,7 @@
   max-height: 100vh;
   border-radius: 0;
 }
+.app-toolbar .app-identity{display:flex;align-items:center;min-width:0}.app-toolbar .app-identity b{max-width:min(52vw,620px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:16px}.app-toolbar .app-toolbar-actions{margin-left:auto}.app-toolbar .app-toolbar-actions button:first-child{color:white;border-color:#484a55}
 .window-sizes {
   display: flex;
   gap: 4px;
@@ -91,9 +92,6 @@
   .window-sizes button:after {
     font-size: 13px;
     content: "◻";
-  }
-  .app-toolbar-actions button:first-child {
-    display: none;
   }
   .app-toolbar {
     padding: 0 10px;
